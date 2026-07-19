@@ -1,5 +1,7 @@
 node_modules/
 dist/
+build/icon.png
+build/icon.iconset/
 out/
 native/systemaudio
 *.log

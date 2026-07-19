@@ -1,29 +1,25 @@
 <div align="center">
 
-# cue
+# Laka AI
 
-**An open-source AI copilot that floats over your screen — sees what you see, hears your meetings, and stays hidden from screen shares.**
+**A local AI assistant that can help with your screen, notes, and permitted conversations.**
 
 A free, self-hosted alternative to Cluely. Bring your own AI key (OpenAI · Anthropic · Google Gemini).
 
-<img src="docs/tutorial.png" width="620" alt="cue first-run tutorial" />
+<img src="docs/tutorial.png" width="620" alt="Laka AI first-run tutorial" />
 
 </div>
 
 ---
 
 > [!IMPORTANT]
-> **Please read this first.** cue tries to stay out of screen recordings/shares, but this is **best-effort, not guaranteed** — on macOS 15.4+ Apple can let modern capture tools see it anyway, and a phone camera always can. Using a hidden assistant during a **proctored exam, job interview, or recorded meeting** may break that platform's rules and, in some places, consent laws. cue is built for legitimate uses — your own notes, studying, accessibility, and practice. **You are responsible for how you use it.**
->
-> On Zoom specifically, whether cue is hidden depends on one setting — **Settings → Share Screen → Screen capture mode → "Advanced capture with window filtering."**
->
-> <img src="docs/zoom-capture-mode.png" width="560" alt="Zoom Settings → Share Screen → Screen capture mode set to Advanced capture with window filtering" />
+> **Please read this first.** Use Laka AI only for legitimate, permitted workflows — such as your own notes, studying, accessibility, and practice. Do not use it in proctored exams, interviews, or recorded meetings unless every participant and platform explicitly permits it.
 
 ---
 
 ## What it does
 
-cue floats a small glass panel on top of everything. It takes **three separate inputs** — your **screen**, your **microphone**, and your **meeting audio** (what the other person says) — and uses an AI model to help you in real time.
+Laka AI floats a small glass panel on top of everything. It takes **three separate inputs** — your **screen**, your **microphone**, and permitted **meeting audio** — and uses an AI model to help you in real time.
 
 | Feature | How to trigger | What it uses |
 |---|---|---|
@@ -35,30 +31,13 @@ cue floats a small glass panel on top of everything. It takes **three separate i
 | **Solve a coding problem** | `⌘` `H` | your screen only |
 | **Smart** toggle | pill in the box | switches to a smarter (slower) model |
 
-It's a copilot for **live meetings** ("what do I say to that?") and **coding problems** (screenshot → full solution), and it's designed to be **invisible in screen shares** so it stays your private assistant.
+It is designed for your own notes, permitted conversations, study, and practice. Screen-capture behavior is platform-dependent and must not be relied on for concealment.
 
 ---
 
 ## Install
 
-There are two ways to install cue. **If you're not a developer, use Option A.**
-
-### Option A — Download the app (easiest)
-
-1. Go to the [**Releases**](../../releases) page and download **`cue-mac.zip`**.
-2. Double-click the zip to unzip it. You'll get **`cue.app`**.
-3. Drag **`cue.app`** into your **Applications** folder.
-4. **First open (important):** because cue is a free app without a paid Apple certificate, macOS will refuse to open it normally the first time. Do this once:
-   - **Right-click** `cue.app` → **Open** → click **Open** in the dialog.
-   - If macOS instead says **"cue is damaged and can't be opened,"** open the **Terminal** app and paste this line, then press Return:
-     ```bash
-     xattr -cr /Applications/cue.app
-     ```
-     Then double-click cue.app again. (This just tells macOS "yes, I trust this app I downloaded." It's safe.)
-
-After that, cue opens normally forever.
-
-### Option B — Run from source (developers)
+Run Laka AI from source:
 
 You need [Node.js](https://nodejs.org) 18+ installed. No Xcode required.
 
@@ -69,46 +48,42 @@ npm install
 npm start
 ```
 
-To build your own `cue.app`:
+To build your own `Laka AI.app`:
 ```bash
-npm run pack      # creates dist/mac-arm64/cue.app
+npm run pack      # creates dist/mac-arm64/Laka AI.app
 ```
-> Note: the packaged app is **ad-hoc signed** (no paid Apple certificate). macOS ties permission grants to the exact build, so **rebuilding resets the mic/screen permissions** — you'll grant them again. For everyday use, build once and keep it.
+> Note: local builds are unsigned until you configure an Apple Developer ID certificate. The release configuration enables hardened runtime and notarization when its signing and Apple credentials are supplied. macOS permission grants may need to be renewed after replacing a locally built app.
+
+For a public, signed macOS download through GitHub Releases, follow [the release guide](docs/RELEASE.md).
 
 ---
 
 ## First launch — the 1-minute setup
 
-When cue opens the first time, a **built-in tutorial** walks you through everything below. You can reopen it anytime by clicking the **cue logo** (top-left of the pill). Here's the same thing in writing.
+When Laka AI opens the first time, a **built-in tutorial** walks you through everything below. You can reopen it anytime by clicking the **Laka AI logo** (top-left of the pill). Here's the same thing in writing.
 
 ### Step 1 — Grant two macOS permissions
 
-cue can't help until macOS lets it see and hear. When you first use a feature, macOS will prompt you — click **Allow**. If a prompt doesn't appear, add cue manually:
+Laka AI can't help until macOS lets it see and hear. When you first use a feature, macOS will prompt you — click **Allow**. If a prompt doesn't appear, add Laka AI manually:
 
-- **Microphone:** System Settings → **Privacy & Security** → **Microphone** → turn on **cue**.
-- **Screen Recording:** System Settings → **Privacy & Security** → **Screen Recording** → turn on **cue**. (This one grant covers both screenshots *and* meeting audio.) macOS may ask you to **quit & reopen** cue — let it.
+- **Microphone:** System Settings → **Privacy & Security** → **Microphone** → turn on **Laka AI**.
+- **Screen Recording:** System Settings → **Privacy & Security** → **Screen Recording** → turn on **Laka AI**. (This one grant covers both screenshots *and* meeting audio.) macOS may ask you to **quit & reopen** Laka AI — let it.
 
 ### Step 2 — Add your AI key (bring your own)
 
-cue uses **your own** API key, so it's free to run (you only pay your AI provider for what you use). Click the **`...`** button in the input box (or press `⌘` `,`) to open **Settings**, pick a provider, and paste your key:
+Laka AI uses **your own** API key. Click the **`...`** button in the input box (or press `⌘` `,`) to open **Settings**, pick a provider, and paste your key:
 
 | Provider | Get a key | Notes |
 |---|---|---|
 | **OpenAI** | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) | One key does everything — **but** for the *listening* features the key must have **Whisper / audio** access (a "restricted" project key that only allows chat will give a 403 on transcription). |
 | **Anthropic (Claude)** | [console.anthropic.com](https://console.anthropic.com) | Great for screen & coding help. Claude has no speech-to-text, so add an OpenAI or Gemini key too if you want the listening features. |
-| **Google Gemini** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | One key does chat + transcription. |
+| **Google Gemini** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Recommended starting point: one key does chat + transcription, with a limited free tier. |
 
-Your key is stored **only on your computer** (in `cue-data.json`) and is sent **only** to that provider. cue has no server and collects nothing.
+Your API keys are encrypted with macOS Keychain and the settings file retains only encrypted ciphertext. They are sent only to the provider you choose. Laka AI has no server and collects nothing.
 
-### Step 3 — The Zoom setting (only needed for Zoom)
+### Step 3 — Use with consent
 
-cue is hidden from most screen-share tools automatically — **Google Meet, Microsoft Teams, and QuickTime need nothing.** **Zoom** has a specific setting that decides whether it respects cue's "don't capture me" flag:
-
-> **Zoom → Settings → Share Screen → Advanced → Screen capture mode → choose "Advanced capture with window filtering."**
-
-<div align="center"><img src="docs/zoom-setting.png" width="560" alt="Zoom screen capture mode setting" /></div>
-
-**Why:** the *"...with window filtering"* modes tell Zoom to leave out windows that mark themselves as private — which is exactly what cue does. The **"Advanced capture without window filtering"** mode grabs the raw screen and **will show cue**, so avoid it.
+Before using Laka AI with screen or audio input, ensure every participant and the platform allow it. Visibility in screen recordings or screen shares is not guaranteed.
 
 ---
 
@@ -119,7 +94,7 @@ cue is hidden from most screen-share tools automatically — **Google Meet, Micr
 - **The `▢` button** (top bar) — start/stop **listening** to a meeting. The green dot means it's live.
 - **Type a question** in the box and press `↵` to ask about your screen or conversation.
 - **Smart** — flip it on for a smarter, more thorough model; off for fast and cheap.
-- **Hide** collapses the panel to just the top bar. Drag cue around by the **top pill**. Quit with `⌘` `⇧` `X`.
+- **Hide** collapses the panel to just the top bar. Drag Laka AI around by the **top pill**. Quit from **Settings → Quit Laka AI** or with `⌘` `⇧` `X`.
 
 The panel is see-through and click-through — the empty space around it never blocks the app behind it.
 
@@ -127,16 +102,16 @@ The panel is see-through and click-through — the empty space around it never b
 
 ## How it works (under the hood)
 
-cue is an [Electron](https://www.electronjs.org/) app. Everything runs locally except the calls to your chosen AI provider.
+Laka AI is an [Electron](https://www.electronjs.org/) app. Everything runs locally except the calls to your chosen AI provider.
 
 **The three inputs are kept completely separate:**
 - **Screen** — captured with Electron's `desktopCapturer` (full-resolution screenshots, taken only when a feature needs one).
 - **Your mic ("You")** — `getUserMedia` → downsampled to 16 kHz audio → transcribed.
-- **Meeting audio ("Them")** — `getDisplayMedia` loopback capture of your system's output audio, kept on its own channel so cue knows *who* said what.
+- **Meeting audio ("Them")** — `getDisplayMedia` loopback capture of your system's output audio, kept on its own channel so Laka AI knows *who* said what.
 
 Both audio streams are transcribed (OpenAI Whisper or Gemini) and fed, with an optional screenshot, to your AI model. Responses **stream** into the panel word-by-word.
 
-**The invisibility** is a single macOS window flag: `setContentProtection(true)`, which sets `NSWindowSharingNone`. This asks the window server to exclude cue from screen-capture streams. It's the same mechanism DRM apps and Zoom's own toolbar use. It is **not** a GPU trick or a special overlay layer — and on macOS 15.4+ Apple lets some capture tools ignore it, which is why it's best-effort (see the disclaimer at the top).
+The app uses macOS content protection where available, but this is not a privacy or concealment guarantee. Treat every screen share and recording as if Laka AI could be visible.
 
 ```
 main process ──┬─ overlay window (frameless, transparent, always-on-top, content-protected)
@@ -151,31 +126,31 @@ renderer ──────┴─ the glass UI + mic capture + system-audio loop
 ## Troubleshooting
 
 **"It says give access, but I already gave access."**
-You probably granted an older build. Because the app is ad-hoc signed, a rebuild changes its identity and macOS stops honoring the old grant (the checkmark can linger). Toggle cue **off and on** in System Settings → Screen Recording, or remove and re-add it.
+You may have granted an older build. Replacing a locally built app can make macOS stop honoring an old grant (the checkmark can linger). Toggle Laka AI **off and on** in System Settings → Screen Recording, or remove and re-add it.
 
 **A feature returns "403" / "no access to model."**
-Your API key is restricted. Most often it's an OpenAI **project key that only allows chat models** — it works for screen/coding help but 403s on transcription (Whisper). Fix: enable audio/Whisper on the key, use an unrestricted key, or add a Gemini key (cue falls back to it for transcription).
+Your API key is restricted. Most often it's an OpenAI **project key that only allows chat models** — it works for screen/coding help but 403s on transcription (Whisper). Fix: enable audio/Whisper on the key, use an unrestricted key, or add a Gemini key (Laka AI falls back to it for transcription).
 
 **Listening does nothing / no transcript.**
 Check Settings shows a transcription-capable key (OpenAI with Whisper, or Gemini). Also make sure Screen Recording is granted (meeting audio needs it).
 
-**cue shows up in my Zoom share.**
-Set Zoom's **Screen capture mode** to *"Advanced capture with window filtering"* (see Step 3). And remember: on macOS 15.4+ this can still fail — it's best-effort.
+**Laka AI shows up in a screen share.**
+This is expected behavior on some capture paths. Do not rely on the app being excluded from any screen share or recording.
 
-**"cue is damaged and can't be opened."**
-Run `xattr -cr /Applications/cue.app` in Terminal once (see Install → Option A).
+**"Laka AI is damaged and can't be opened."**
+Right-click the local app bundle and choose **Open**, or build it again with `npm run pack`.
 
 ---
 
 ## Privacy
 
-- No accounts, no servers, no telemetry. cue collects nothing.
-- Your API keys live in a local file (`cue-data.json`) and are sent only to the provider you chose.
-- Screenshots and audio are sent to your AI provider only when a feature runs, and are not stored by cue beyond the current session's transcript (kept in memory).
+- No accounts, no servers, no telemetry. Laka AI collects nothing.
+- Your API keys are encrypted in macOS Keychain; `laka-ai-data.json` holds only encrypted values and non-secret preferences.
+- Screenshots and audio are sent to your AI provider only when a feature runs, and are not stored by Laka AI beyond the current session's transcript (kept in memory).
 
 ## Contributing
 
-Issues and PRs welcome. cue is intentionally small and readable — `main.js` (app + capture + AI), `renderer/` (the UI), `src/` (providers). No build step for the source (plain HTML/CSS/JS).
+Issues and PRs welcome. Laka AI is intentionally small and readable — `main.js` (app + capture + AI), `renderer/` (the UI), `src/` (providers). No build step for the source (plain HTML/CSS/JS).
 
 ### Platform Support
 - [x] **macOS** (Fully Supported)

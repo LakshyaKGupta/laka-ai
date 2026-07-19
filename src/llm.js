@@ -111,15 +111,16 @@ function createLLM(settings) {
   const tier = settings.smart ? 'smart' : 'fast';
   const model = (settings.models[provider] || {})[tier];
   
-  // Set to 4096 (effectively unlimited for a single response) 
-  // since some SDKs like Anthropic require a maxTokens value.
-  const maxTokens = 4096;
+  const maxTokens = settings.smart ? 1600 : 800;
+  const freeTierModels = new Set(['gemini-3.1-flash-lite', 'gemini-3-flash-preview']);
+  const freeTierBlocked = settings.freeTierOnly && (provider !== 'gemini' || !freeTierModels.has(model));
 
   if (DEBUG) console.log('[DEBUG LLM] createLLM initialized:', { provider, model, isKeyPresent: !!apiKey, ready: !!apiKey && !!model });
 
   return {
     provider, model, apiKey,
-    ready: !!apiKey && !!model,
+    ready: !!apiKey && !!model && !freeTierBlocked,
+    error: freeTierBlocked ? 'Free-tier only is enabled. Select Gemini with a supported free-tier model.' : '',
     async stream(params) {
       if (DEBUG) console.log('[DEBUG LLM] stream() invoked for provider:', provider);
       const args = { apiKey, model, maxTokens, ...params };

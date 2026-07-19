@@ -1,5 +1,5 @@
 const DEBUG = false; // Set to false to disable debug logging
-const { app, BrowserWindow, ipcMain, globalShortcut, screen, session, desktopCapturer, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, globalShortcut, screen, session, desktopCapturer, shell } = require('electron');
 const path = require('path');
 const store = require('./src/store');
 const { captureScreenshot } = require('./src/screen');
@@ -7,17 +7,23 @@ const { createSTT } = require('./src/stt');
 const { createLLM } = require('./src/llm');
 const { MODES } = require('./src/prompts');
 const { rms16 } = require('./src/wav');
+const { extractResumeText } = require('./src/resume');
+const { boundedText, sanitizeAskPayload, sanitizeSettingsPatch, toPcmBuffer } = require('./src/validators');
 
 let win = null;
 
 // -------- capture / transcript state --------
-const state = { capturing: false, busy: false, transcribing: { you: false, them: false } };
+const state = { capturing: false, busy: false, requests: 0, transcribing: { you: false, them: false } };
 let sttDisabled = false; // set when the key can't reach any speech model (stops retry spam)
 const buffers = { you: [], them: [] };
+const bufferBytes = { you: 0, them: 0 };
 const transcript = []; // { channel, text, ts }
+const context = { resumeText: '', resumeName: '', company: '', role: '', responsibilities: '' };
 const FLUSH_MS = 3500;
 const MIN_BYTES = Math.floor(16000 * 2 * 0.6); // ~0.6s
 const RMS_GATE = 240;
+const MAX_TRANSCRIPT_TURNS = 80;
+const MAX_BUFFER_BYTES = 2 * 1024 * 1024;
 let flushTimer = null;
 
 function send(channel, data) { if (win && !win.isDestroyed()) win.webContents.send(channel, data); }
@@ -42,7 +48,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     }
   });
 
@@ -59,7 +65,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
   win.webContents.on('did-finish-load', () => win.showInactive());
-  win.webContents.on('render-process-gone', (_e, d) => console.log('[cue] renderer gone', JSON.stringify(d)));
+  win.webContents.on('render-process-gone', (_e, d) => console.log('[laka-ai] renderer gone', JSON.stringify(d)));
 }
 
 // -------- STT flushing --------
@@ -68,7 +74,7 @@ async function flushChannel(channel) {
   const chunks = buffers[channel];
   if (!chunks.length) return;
   const pcm = Buffer.concat(chunks);
-  buffers[channel] = [];
+  buffers[channel] = []; bufferBytes[channel] = 0;
   if (pcm.length < MIN_BYTES) return;
   if (rms16(pcm) < RMS_GATE) return; // silence gate
 
@@ -77,7 +83,7 @@ async function flushChannel(channel) {
     const settings = store.getSettings();
     const stt = createSTT(settings);
     if (!stt.available) {
-      if (!sttDisabled) { sttDisabled = true; send('status', { message: 'No transcription key set. Add an OpenAI (Whisper) or Gemini key in Settings to enable listening. Screen/LeetCode features work without it.' }); }
+      if (!sttDisabled) { sttDisabled = true; send('status', { message: 'No transcription key set. Add a Gemini or OpenAI key in Settings to enable listening. Screen-based features work without it.' }); }
       return;
     }
     const res = await stt.transcribe(pcm);
@@ -88,6 +94,7 @@ async function flushChannel(channel) {
     if (res.text && res.text.trim()) {
       const turn = { channel, text: res.text.trim(), ts: Date.now() };
       transcript.push(turn);
+      while (transcript.length > MAX_TRANSCRIPT_TURNS) transcript.shift();
       if (DEBUG) console.log(`[TRANSCRIPT] ${channel === 'you' ? 'You' : 'Them'}:`, turn.text);
       send('transcript', turn);
     }
@@ -118,15 +125,15 @@ function stopFlushLoop() { if (flushTimer) { clearInterval(flushTimer); flushTim
 
 // -------- capture toggle --------
 // Mic + system audio are both captured in the RENDERER (getUserMedia for the mic,
-// getDisplayMedia loopback for system audio) so they run inside cue's own process
-// and use cue's own Screen-Recording grant — no separate helper binary to authorize.
+// getDisplayMedia loopback for system audio) so they run inside Laka AI's own process
+// and use Laka AI's own Screen-Recording grant — no separate helper binary to authorize.
 function setCapturing(active) {
   state.capturing = active;
   if (active) {
     startFlushLoop();
   } else {
     stopFlushLoop();
-    buffers.you = []; buffers.them = [];
+    buffers.you = []; buffers.them = []; bufferBytes.you = 0; bufferBytes.them = 0;
   }
   send('capture:state', { active });
   return active;
@@ -151,7 +158,7 @@ async function runFeature(mode, userText) {
 
     if (!llm.ready) {
       if (DEBUG) console.log('[DEBUG MAIN] LLM not ready (missing key or model).');
-      send('llm:error', { message: 'Add your ' + settings.provider + ' API key in Settings (gear icon) to start. Model: ' + (llm.model || 'unset') + '.' });
+      send('llm:error', { message: llm.error || ('Add your ' + settings.provider + ' API key in Settings (gear icon) to start. Model: ' + (llm.model || 'unset') + '.') });
       return;
     }
 
@@ -164,11 +171,11 @@ async function runFeature(mode, userText) {
       }
       catch (e) { 
         if (DEBUG) console.error('[DEBUG MAIN] Screenshot capture failed:', e);
-        send('status', { message: 'Screen capture needs permission — grant Screen Recording to cue in System Settings.' }); 
+        send('status', { message: 'Screen capture needs permission — grant Screen Recording to Laka AI in System Settings.' });
       }
     }
 
-    const built = def.build({ transcript, userText: userText || '' });
+    const built = def.build({ transcript, userText: userText || '', ...context });
     if (DEBUG) console.log('[DEBUG MAIN] Built prompt. Starting LLM stream...');
     const fullText = await llm.stream({
       system: def.system,
@@ -176,6 +183,8 @@ async function runFeature(mode, userText) {
       imageDataUrl,
       onToken: (t) => send('llm:token', { text: t })
     });
+    state.requests += 1;
+    send('usage:update', { requests: state.requests, freeTierOnly: settings.freeTierOnly });
     if (DEBUG) console.log('[DEBUG MAIN] Full LLM Output:\n', fullText);
     send('llm:done', {});
   } catch (e) {
@@ -186,16 +195,89 @@ async function runFeature(mode, userText) {
 }
 
 // -------- IPC --------
-ipcMain.handle('settings:get', () => store.getSettings());
-ipcMain.handle('settings:set', (_e, patch) => { sttDisabled = false; return store.setSettings(patch); });
-ipcMain.handle('capture:toggle', () => setCapturing(!state.capturing));
-ipcMain.handle('capture:state', () => ({ active: state.capturing }));
-ipcMain.on('ask', (_e, payload) => runFeature(payload.mode, payload.text));
-ipcMain.on('mic:pcm', (_e, arrayBuffer) => { if (state.capturing) buffers.you.push(Buffer.from(arrayBuffer)); });
-ipcMain.on('system:pcm', (_e, arrayBuffer) => { if (state.capturing) buffers.them.push(Buffer.from(arrayBuffer)); });
-ipcMain.on('mouse:ignore', (_e, v) => { if (win) win.setIgnoreMouseEvents(!!v, { forward: true }); });
-ipcMain.on('open-pane', (_e, url) => { shell.openExternal(url).catch(() => {}); });
-ipcMain.on('log', (_e, msg) => console.log('[renderer]', msg));
+function isTrustedRenderer(event) {
+  return Boolean(win && !win.isDestroyed() && event.sender === win.webContents);
+}
+
+function queuePcm(channel, arrayBuffer) {
+  const pcm = toPcmBuffer(arrayBuffer);
+  if (!pcm || bufferBytes[channel] + pcm.length > MAX_BUFFER_BYTES) return;
+  buffers[channel].push(pcm);
+  bufferBytes[channel] += pcm.length;
+}
+
+ipcMain.handle('settings:get', (event) => isTrustedRenderer(event) ? store.getPublicSettings() : null);
+ipcMain.handle('settings:set', (event, patch) => {
+  if (!isTrustedRenderer(event)) return null;
+  sttDisabled = false;
+  return store.setSettings(sanitizeSettingsPatch(patch));
+});
+ipcMain.handle('capture:toggle', (event) => isTrustedRenderer(event) ? setCapturing(!state.capturing) : false);
+ipcMain.handle('capture:state', (event) => isTrustedRenderer(event) ? { active: state.capturing } : { active: false });
+ipcMain.handle('app:quit', (event) => {
+  if (!isTrustedRenderer(event)) return false;
+  setCapturing(false);
+  app.quit();
+  return true;
+});
+ipcMain.handle('history:clear', (event) => {
+  if (!isTrustedRenderer(event)) return false;
+  transcript.length = 0;
+  buffers.you = []; buffers.them = []; bufferBytes.you = 0; bufferBytes.them = 0;
+  return true;
+});
+ipcMain.handle('usage:get', (event) => isTrustedRenderer(event) ? { requests: state.requests, freeTierOnly: store.getSettings().freeTierOnly } : null);
+ipcMain.handle('profile:get', (event) => isTrustedRenderer(event) ? store.getPublicProfile() : null);
+ipcMain.handle('profile:set', (event, profile, enabled) => {
+  if (!isTrustedRenderer(event)) return null;
+  try {
+    const saved = store.setProfile({ ...context, ...profile }, enabled);
+    if (saved.enabled) Object.assign(context, store.getProfile());
+    return saved;
+  } catch (error) {
+    return { error: error && error.message ? error.message : 'Unable to save profile.' };
+  }
+});
+ipcMain.handle('context:set', (event, patch) => {
+  if (!isTrustedRenderer(event) || !patch || typeof patch !== 'object') return null;
+  context.company = boundedText(patch.company, 500);
+  context.role = boundedText(patch.role, 500);
+  context.responsibilities = boundedText(patch.responsibilities, 4000);
+  return { resumeName: context.resumeName, company: context.company, role: context.role, responsibilities: context.responsibilities };
+});
+ipcMain.handle('resume:import', async (event) => {
+  if (!isTrustedRenderer(event)) return null;
+  const picked = await dialog.showOpenDialog(win, {
+    title: 'Choose your resume',
+    properties: ['openFile'],
+    filters: [{ name: 'Resume', extensions: ['pdf', 'docx', 'txt', 'md'] }]
+  });
+  if (picked.canceled || !picked.filePaths[0]) return { canceled: true };
+  try {
+    context.resumeText = await extractResumeText(picked.filePaths[0]);
+    context.resumeName = path.basename(picked.filePaths[0]);
+    if (store.getPublicProfile().enabled) store.setProfile(context, true);
+    return { resumeName: context.resumeName, characters: context.resumeText.length };
+  } catch (error) {
+    return { error: error && error.message ? error.message : 'Unable to read that resume.' };
+  }
+});
+ipcMain.on('ask', (event, payload) => {
+  if (!isTrustedRenderer(event)) return;
+  const safe = sanitizeAskPayload(payload);
+  if (safe) runFeature(safe.mode, safe.text);
+});
+ipcMain.on('mic:pcm', (event, arrayBuffer) => { if (isTrustedRenderer(event) && state.capturing) queuePcm('you', arrayBuffer); });
+ipcMain.on('system:pcm', (event, arrayBuffer) => { if (isTrustedRenderer(event) && state.capturing) queuePcm('them', arrayBuffer); });
+ipcMain.on('mouse:ignore', (event, value) => { if (isTrustedRenderer(event) && typeof value === 'boolean' && win) win.setIgnoreMouseEvents(value, { forward: true }); });
+ipcMain.on('open-pane', (event, url) => {
+  const allowed = new Set(['x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture', 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone']);
+  if (isTrustedRenderer(event) && allowed.has(url)) shell.openExternal(url).catch(() => {});
+});
+ipcMain.on('log', (event, msg) => {
+  if (!isTrustedRenderer(event) || typeof msg !== 'string') return;
+  console.log('[renderer]', msg.slice(0, 2000).replace(/AIza[\w-]+/g, '[redacted]'));
+});
 
 // -------- shortcuts --------
 function registerShortcuts() {
@@ -206,15 +288,18 @@ function registerShortcuts() {
 
 // -------- lifecycle --------
 app.whenReady().then(() => {
+  const savedProfile = store.getProfile();
+  if (savedProfile.enabled) Object.assign(context, savedProfile);
   if (app.dock) app.dock.hide();
 
-  const allowMedia = (permission) => permission === 'media' || permission === 'microphone' || permission === 'audioCapture' || permission === 'display-capture';
-  session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => cb(allowMedia(permission)));
-  session.defaultSession.setPermissionCheckHandler((_wc, permission) => allowMedia(permission));
+  const allowMedia = (webContents, permission) => webContents === win?.webContents && ['media', 'microphone', 'audioCapture', 'display-capture'].includes(permission);
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, cb) => cb(allowMedia(webContents, permission)));
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => allowMedia(webContents, permission));
 
   // System-audio loopback for getDisplayMedia: hand back a screen source with 'loopback'
   // audio so the renderer can capture what's playing (Zoom/Meet) using cue's own grant.
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    if (request.webContents !== win?.webContents) return callback();
     desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
       if (sources.length) callback({ video: sources[0], audio: 'loopback' });
       else callback();

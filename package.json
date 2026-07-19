@@ -1,20 +1,27 @@
 {
-  "name": "cue",
-  "version": "0.1.0",
-  "description": "Open-source macOS invisible AI overlay — three separate inputs (screen, mic, system audio) into an LLM. A Cluely-style copilot for meetings and coding problems.",
+  "name": "laka-ai",
+  "version": "0.1.1",
+  "description": "A local desktop AI assistant for personal productivity, study, accessibility, and practice.",
   "license": "GPL-3.0-or-later",
-  "author": "cue",
+  "author": "Laka AI",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "test": "node --test test/*.test.js",
     "pack": "electron-builder --dir",
+    "verify": "npm test && npm run pack",
     "dist": "electron-builder --mac zip",
     "dist:win": "electron-builder --win"
   },
   "build": {
-    "appId": "com.cue.overlay",
-    "productName": "cue",
-    "asar": false,
+    "appId": "com.lakshya.lakaai",
+    "productName": "Laka AI",
+    "afterSign": "scripts/notarize.js",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/pdf-parse/**",
+      "node_modules/pdfjs-dist/**"
+    ],
     "files": [
       "main.js",
       "preload.js",
@@ -26,14 +33,16 @@
         "dir"
       ],
       "category": "public.app-category.productivity",
-      "hardenedRuntime": false,
-      "gatekeeperAssess": false,
-      "identity": null,
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
         "LSUIElement": true,
-        "NSMicrophoneUsageDescription": "cue transcribes your microphone so it can help you in conversations.",
-        "NSCameraUsageDescription": "cue does not use the camera.",
-        "NSAudioCaptureUsageDescription": "cue captures system audio to transcribe the other participant in a call."
+        "NSMicrophoneUsageDescription": "Laka AI transcribes your microphone to support your chosen workflow.",
+        "NSCameraUsageDescription": "Laka AI does not use the camera.",
+        "NSAudioCaptureUsageDescription": "Laka AI captures system audio to transcribe a conversation when you explicitly enable listening."
       }
     },
     "win": {
@@ -51,13 +60,16 @@
     "macos"
   ],
   "devDependencies": {
-    "electron": "33.2.1",
-    "electron-builder": "^24.13.3"
+    "@electron/notarize": "^3.1.1",
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
-    "@google/genai": "^0.3.0",
-    "lucide-static": "^0.468.0",
-    "openai": "^4.73.0"
+    "@anthropic-ai/sdk": "^0.112.3",
+    "@google/genai": "^2.12.0",
+    "lucide-static": "^1.25.0",
+    "mammoth": "^1.12.0",
+    "openai": "^6.48.0",
+    "pdf-parse": "^2.4.5"
   }
 }

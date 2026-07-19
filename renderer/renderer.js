@@ -23,6 +23,9 @@
   let busy = false;
   let aiEl = null;       // current streaming <div class="ai-text">
   let caretEl = null;
+  let usage = { requests: 0, freeTierOnly: true };
+  let resumeName = '';
+  let profile = { enabled: false, displayName: '', company: '', role: '', responsibilities: '', resumeName: '', hasResume: false };
 
   const messages = $('#messages');
 
@@ -131,7 +134,7 @@
   smartBtn.addEventListener('click', async () => {
     settings.smart = !settings.smart;
     smartBtn.classList.toggle('on', settings.smart);
-    await cue.settingsSet({ smart: settings.smart });
+    settings = await cue.settingsSet({ smart: settings.smart });
   });
 
   // Hide / collapse
@@ -144,8 +147,6 @@
   // Stop = start/stop listening. Kick off system-audio capture straight from the click so
   // the user-gesture is fresh for getDisplayMedia (loopback capture needs it).
   $('#stop-btn').addEventListener('click', () => {
-    const turningOn = !$('#stop-btn').classList.contains('active');
-    if (turningOn) startSystemAudio();
     cue.captureToggle();
   });
 
@@ -235,30 +236,46 @@
     statusTimer = setTimeout(() => el.classList.remove('show'), 11000);
   }
   cue.on('status', ({ message }) => { cue.log('[status] ' + message); showStatus(message); });
+  cue.on('usage:update', (next) => { usage = next; updateUsage(); });
 
   // ---- settings ----------------------------------------------------------
   const scrim = $('#settings-scrim');
   function openSettings() { fillSettings(); scrim.classList.remove('hidden'); }
-  function closeSettings() { saveSettings(); scrim.classList.add('hidden'); }
+  async function closeSettings() { await saveSettings(); scrim.classList.add('hidden'); }
   $('#more-btn').addEventListener('click', openSettings);
   $('#s-close').addEventListener('click', closeSettings);
   scrim.addEventListener('click', (e) => { if (e.target === scrim) closeSettings(); });
 
   function fillSettings() {
     document.querySelectorAll('#provider-seg button').forEach((b) => b.classList.toggle('on', b.dataset.provider === settings.provider));
-    $('#key-openai').value = settings.apiKeys.openai || '';
-    $('#key-anthropic').value = settings.apiKeys.anthropic || '';
-    $('#key-gemini').value = settings.apiKeys.gemini || '';
-    $('#key-nvidia').value = settings.apiKeys.nvidia || '';
+    const setKeyInput = (provider) => {
+      const field = $('#key-' + provider);
+      field.value = '';
+      field.dataset.defaultPlaceholder = field.dataset.defaultPlaceholder || field.placeholder;
+      field.placeholder = settings.apiKeyConfigured[provider] ? 'Configured — enter a new key to replace' : field.dataset.defaultPlaceholder;
+    };
+    ['openai', 'anthropic', 'gemini', 'nvidia'].forEach(setKeyInput);
     const m = settings.models[settings.provider] || { fast: '', smart: '' };
     $('#model-fast').value = m.fast; $('#model-smart').value = m.smart;
+    $('#free-tier-only').checked = !!settings.freeTierOnly;
+    $('#remember-profile').checked = !!profile.enabled;
+    $('#display-name').value = $('#display-name').value || profile.displayName || '';
+    $('#company').value = $('#company').value || profile.company || '';
+    $('#role').value = $('#role').value || profile.role || '';
+    $('#responsibilities').value = $('#responsibilities').value || profile.responsibilities || '';
+    $('#resume-status').textContent = resumeName || profile.resumeName || 'Not loaded';
+    updateUsage();
     $('#s-status').textContent = statusText();
   }
   function statusText() {
-    const k = settings.apiKeys;
+    const k = settings.apiKeyConfigured;
     const has = [k.openai && 'OpenAI', k.anthropic && 'Anthropic', k.gemini && 'Gemini', k.nvidia && 'Nvidia'].filter(Boolean);
     const stt = k.openai ? 'Whisper' : (k.gemini ? 'Gemini' : 'none');
     return 'Active: ' + settings.provider + ' · keys: ' + (has.join(', ') || 'none set') + ' · transcription: ' + stt;
+  }
+  function updateUsage() {
+    const text = `${usage.requests || 0} requests this session · ${usage.freeTierOnly ? 'free-tier only is on' : 'paid models may be used'}`;
+    $('#usage-status').textContent = text;
   }
   document.querySelectorAll('#provider-seg button').forEach((b) => b.addEventListener('click', () => {
     settings.provider = b.dataset.provider;
@@ -268,15 +285,32 @@
     $('#s-status').textContent = statusText();
   }));
   async function saveSettings() {
-    settings.apiKeys.openai = $('#key-openai').value.trim();
-    settings.apiKeys.anthropic = $('#key-anthropic').value.trim();
-    settings.apiKeys.gemini = $('#key-gemini').value.trim();
-    settings.apiKeys.nvidia = $('#key-nvidia').value.trim();
+    const apiKeys = {};
+    ['openai', 'anthropic', 'gemini', 'nvidia'].forEach((provider) => {
+      const value = $('#key-' + provider).value.trim();
+      if (value) apiKeys[provider] = value;
+    });
     if (!settings.models[settings.provider]) settings.models[settings.provider] = {};
     settings.models[settings.provider].fast = $('#model-fast').value.trim();
     settings.models[settings.provider].smart = $('#model-smart').value.trim();
-    await cue.settingsSet(settings);
+    settings = await cue.settingsSet({ provider: settings.provider, models: settings.models, apiKeys, freeTierOnly: $('#free-tier-only').checked });
+    const contextPatch = { company: $('#company').value, role: $('#role').value, responsibilities: $('#responsibilities').value };
+    await cue.contextSet(contextPatch);
+    profile = await cue.profileSet({ displayName: $('#display-name').value, ...contextPatch }, $('#remember-profile').checked);
+    if (profile && profile.error) showStatus(profile.error);
   }
+  $('#resume-upload').addEventListener('click', async () => {
+    const result = await cue.resumeImport();
+    if (result && result.resumeName) {
+      resumeName = result.resumeName;
+      $('#resume-status').textContent = `${resumeName} · ${result.characters} chars`;
+      if ($('#remember-profile').checked) profile = await cue.profileSet({ displayName: $('#display-name').value, company: $('#company').value, role: $('#role').value, responsibilities: $('#responsibilities').value }, true);
+    } else if (result && result.error) showStatus(result.error);
+  });
+  $('#clear-history').addEventListener('click', async () => {
+    if (await cue.historyClear()) showStatus('Conversation history cleared.');
+  });
+  $('#quit-app').addEventListener('click', () => cue.quit());
 
   // ---- example conversation (matches the reference screenshot) ------------
   function showExample() {
@@ -320,13 +354,13 @@
   const OB_STEPS = [
     {
       icon: '👋',
-      title: 'Welcome to cue',
-      body: 'cue is a private AI copilot that floats over your screen. It can <strong>see your screen</strong>, <strong>hear your meetings</strong>, and help you answer questions or solve coding problems — while staying hidden from most screen shares.<br><br>This quick guide gets you running in about a minute.'
+      title: 'Welcome to Laka AI',
+      body: 'Laka AI is a private assistant that floats over your screen. It can <strong>see your screen</strong> and, when you enable it, <strong>hear your conversations</strong> to help with notes, study, accessibility, and practice. Use it only where every participant and platform permits it.<br><br>This quick guide gets you running in about a minute.'
     },
     ...(cue.platform === 'darwin' ? [{
       icon: '🔐',
-      title: 'Allow cue to see & hear',
-      body: 'cue needs two macOS permissions. Click each button, turn <strong>cue</strong> ON in the window that opens, then come back here.<ul><li><strong>Microphone</strong> — to hear you</li><li><strong>Screen Recording</strong> — to see your screen and hear meeting audio</li></ul>',
+      title: 'Allow Laka AI to see & hear',
+      body: 'Laka AI needs two macOS permissions. Click each button, turn <strong>Laka AI</strong> ON in the window that opens, then come back here.<ul><li><strong>Microphone</strong> — to hear you</li><li><strong>Screen Recording</strong> — to see your screen and hear meeting audio</li></ul>',
       buttons: [
         { label: 'Open Microphone settings', action: () => cue.openPane('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone') },
         { label: 'Open Screen Recording settings', action: () => cue.openPane('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture') }
@@ -335,20 +369,20 @@
     {
       icon: '🔑',
       title: 'Connect an AI provider',
-      body: 'cue uses <strong>your own</strong> API key — pick <span class="hl">OpenAI</span>, <span class="hl">Anthropic</span>, <span class="hl">Google Gemini</span>, or <span class="hl">Nvidia</span>. Get a key from your provider, then paste it into cue\'s Settings.<br><br><strong>Tip:</strong> the listening features need speech-to-text access (an OpenAI key with Whisper, or a Gemini key). A chat-only key still powers screen &amp; coding help.',
-      buttons: [{ label: 'Open cue Settings', action: () => { finishOnboard(); openSettings(); } }]
+      body: 'Laka AI uses <strong>your own</strong> API key. Start with <span class="hl">Google Gemini</span> for the free tier, or choose <span class="hl">OpenAI</span>, <span class="hl">Anthropic</span>, or <span class="hl">Nvidia</span>. Paste your key into Settings.<br><br><strong>Tip:</strong> the listening features need speech-to-text access (a Gemini key, or an OpenAI key with Whisper access).',
+      buttons: [{ label: 'Open Laka AI Settings', action: () => { finishOnboard(); openSettings(); } }]
     },
     {
       icon: '🫥',
-      title: 'Stay hidden in Zoom',
+      title: 'Use responsibly',
       body: cue.platform === 'darwin'
-        ? 'cue is hidden from most screen shares automatically (Google Meet, Teams, QuickTime — nothing to do). <strong>Zoom needs one setting:</strong><br><br>Zoom → <span class="hl">Settings</span> → <span class="hl">Share Screen</span> → <span class="hl">Advanced</span> → <strong>Screen capture mode</strong> → choose <strong>“Advanced capture with window filtering.”</strong><br><br>Avoid “<strong>without</strong> window filtering” — that mode reveals cue.'
-        : 'cue is hidden from screen shares automatically. <strong>For Zoom:</strong><br><br>Zoom → <span class="hl">Settings</span> → <span class="hl">Share Screen</span> → <span class="hl">Advanced</span> → <strong>Screen capture mode</strong> → choose <strong>“Advanced capture with window filtering.”</strong>'
+        ? 'Screen-share visibility is platform-dependent and not guaranteed. Use Laka AI only with the consent of everyone involved and where the platform permits assistance.'
+        : 'Screen-share visibility is platform-dependent and not guaranteed. Use Laka AI only with the consent of everyone involved and where the platform permits assistance.'
     },
     {
       icon: '✨',
       title: 'You’re all set',
-      body: `How to use cue:<ul><li><span class="kbd">${cmdKey}</span> <span class="kbd">↵</span> — <strong>Assist</strong> with whatever's on screen or being said</li><li><span class="kbd">${cmdKey}</span> <span class="kbd">H</span> — solve a coding problem on screen</li><li>Click <strong>▢</strong> in the top bar to start listening to a meeting</li><li>Type a question and press <span class="kbd">↵</span></li></ul>Reopen this guide anytime by clicking the <strong>cue logo</strong>. Quit with <span class="kbd">${cmdKey}</span><span class="kbd">⇧</span><span class="kbd">X</span>.`
+      body: `How to use Laka AI:<ul><li><span class="kbd">${cmdKey}</span> <span class="kbd">↵</span> — <strong>Assist</strong> with what is on screen or in your notes</li><li>Click <strong>▢</strong> in the top bar to start or stop listening where permitted</li><li>Type a question and press <span class="kbd">↵</span></li></ul>Reopen this guide anytime by clicking the <strong>Laka AI logo</strong>. Quit with <span class="kbd">${cmdKey}</span><span class="kbd">⇧</span><span class="kbd">X</span>.`
     }
   ];
   let obIndex = 0;
@@ -378,6 +412,9 @@
   // ---- boot --------------------------------------------------------------
   (async function boot() {
     settings = await cue.settingsGet();
+    usage = await cue.usageGet() || usage;
+    profile = await cue.profileGet() || profile;
+    resumeName = profile.resumeName || '';
     if (cue.platform !== 'darwin') {
       $('#placeholder').innerHTML = 'Ask about your screen or conversation, or <span class="keycap">Ctrl</span><span class="keycap">⏎</span> for Assist';
     }

@@ -1,0 +1,18 @@
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const { sanitizeAskPayload, sanitizeSettingsPatch, toPcmBuffer } = require('../src/validators');
+
+test('accepts a bounded known feature request', () => {
+  assert.deepEqual(sanitizeAskPayload({ mode: 'ask', text: 'Summarize this.' }), { mode: 'ask', text: 'Summarize this.' });
+});
+
+test('rejects unknown modes and oversized audio', () => {
+  assert.equal(sanitizeAskPayload({ mode: 'unknown', text: 'x' }), null);
+  assert.equal(toPcmBuffer(new ArrayBuffer(1024 * 1024 + 1)), null);
+});
+
+test('only allows supported settings fields and non-empty replacement keys', () => {
+  assert.deepEqual(sanitizeSettingsPatch({ provider: 'gemini', smart: true, onboarded: true, apiKeys: { gemini: 'key' }, ignored: true }), {
+    provider: 'gemini', smart: true, onboarded: true, apiKeys: { gemini: 'key' }
+  });
+});

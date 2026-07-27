@@ -7,6 +7,7 @@ const { createSTT } = require('./src/stt');
 const { createLLM, formatProviderError } = require('./src/llm');
 const { MODES } = require('./src/prompts');
 const { rms16 } = require('./src/wav');
+const { takeAudioChunk } = require('./src/audio-buffer');
 const { extractResumeText } = require('./src/resume');
 const { boundedText, getSetupStatus, sanitizeAskPayload, sanitizeSettingsPatch, toPcmBuffer } = require('./src/validators');
 
@@ -29,11 +30,12 @@ function loadTranscriptHistory() {
 function persistTranscriptHistory() {
   store.setHistory(transcript.slice(-200));
 }
-const FLUSH_MS = 3500;
+const FLUSH_MS = 2200;
 const MIN_BYTES = Math.floor(16000 * 2 * 0.6); // ~0.6s
 const RMS_GATE = 240;
 const MAX_TRANSCRIPT_TURNS = 80;
 const MAX_BUFFER_BYTES = 2 * 1024 * 1024;
+const MAX_TRANSCRIPTION_BYTES = 16000 * 2 * 4; // Four seconds keeps live transcription from building a backlog.
 let flushTimer = null;
 
 function send(channel, data) { if (win && !win.isDestroyed()) win.webContents.send(channel, data); }
@@ -102,8 +104,9 @@ async function flushChannel(channel) {
   if (state.transcribing[channel]) return;
   const chunks = buffers[channel];
   if (!chunks.length) return;
-  const pcm = Buffer.concat(chunks);
-  buffers[channel] = []; bufferBytes[channel] = 0;
+  const { pcm, remaining } = takeAudioChunk(chunks, MAX_TRANSCRIPTION_BYTES);
+  buffers[channel] = remaining;
+  bufferBytes[channel] = Math.max(0, bufferBytes[channel] - pcm.length);
   if (pcm.length < MIN_BYTES) return;
   if (rms16(pcm) < RMS_GATE) return; // silence gate
 
@@ -148,7 +151,7 @@ function handleSttError(err) {
   } else if (noAccess) {
     send('status', { message: 'Transcription is off for ' + err.provider + ' because the key does not have speech access. Add a Gemini or OpenAI key in Settings and reopen to enable listening.' });
   } else if (quotaIssue) {
-    send('status', { message: 'Cloud speech is temporarily unavailable for ' + err.provider + '. Local voice fallback will be used if your browser supports it.' });
+    send('status', { message: 'Cloud speech is temporarily unavailable for ' + err.provider + '. Faster-Whisper will be used automatically if enabled.' });
   } else {
     send('status', { message: 'Transcription error (' + err.provider + '): ' + err.message });
   }
@@ -210,7 +213,7 @@ async function runFeature(mode, userText) {
 
     let imageDataUrl = null;
     let screenshotMs = 0;
-    if (def.needsScreen) {
+    if (def.needsScreen && llm.supportsImages) {
       if (DEBUG) console.log('[DEBUG MAIN] Feature needs screen. Capturing screenshot...');
       try { 
         const screenshotStartedAt = Date.now();

@@ -7,14 +7,11 @@ function stripDataUrl(dataUrl) {
   return m ? { mime: m[1], b64: m[2] } : null;
 }
 
-async function streamOpenAI({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken, baseURL }) {
-  if (DEBUG) console.log('[DEBUG LLM] streamOpenAI called', { model, baseURL, hasImage: !!imageDataUrl, maxTokens });
-  const OpenAI = require('openai');
-  const client = new OpenAI({ apiKey, baseURL });
+function buildOpenAIChatMessages({ system, turns, imageDataUrl, supportsImages = true }) {
   const messages = [{ role: 'system', content: system }];
   turns.forEach((t, i) => {
     const last = i === turns.length - 1;
-    if (last && imageDataUrl && t.role === 'user') {
+    if (supportsImages && last && imageDataUrl && t.role === 'user') {
       messages.push({ role: 'user', content: [
         { type: 'text', text: t.text },
         { type: 'image_url', image_url: { url: imageDataUrl } }
@@ -23,6 +20,14 @@ async function streamOpenAI({ apiKey, model, system, turns, imageDataUrl, maxTok
       messages.push({ role: t.role, content: t.text });
     }
   });
+  return messages;
+}
+
+async function streamOpenAI({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken, baseURL, supportsImages = true }) {
+  if (DEBUG) console.log('[DEBUG LLM] streamOpenAI called', { model, baseURL, hasImage: !!imageDataUrl, maxTokens });
+  const OpenAI = require('openai');
+  const client = new OpenAI({ apiKey, baseURL });
+  const messages = buildOpenAIChatMessages({ system, turns, imageDataUrl, supportsImages });
   if (DEBUG) console.log('[DEBUG LLM] streamOpenAI sending request to OpenAI SDK with messages count:', messages.length);
   try {
     const stream = await client.chat.completions.create({ model, messages, stream: true, max_tokens: maxTokens });
@@ -157,6 +162,7 @@ function createLLM(settings) {
 
   return {
     provider, model, apiKey,
+    supportsImages: primary ? primary.provider !== 'groq' : false,
     ready: Boolean(primary) && !freeTierBlocked,
     error: freeTierBlocked ? 'Free-tier only is enabled. Select Gemini or Groq with a supported free-tier model.' : (!primary ? 'Add a provider API key in Settings before asking Laka AI for help.' : ''),
     async stream(params) {
@@ -166,7 +172,7 @@ function createLLM(settings) {
         try {
           const args = { apiKey: candidate.apiKey, model: candidate.model, maxTokens, ...params };
           if (candidate.provider === 'openai') return await streamOpenAI(args);
-          if (candidate.provider === 'groq') return await streamOpenAI({ ...args, baseURL: 'https://api.groq.com/openai/v1' });
+          if (candidate.provider === 'groq') return await streamOpenAI({ ...args, baseURL: 'https://api.groq.com/openai/v1', supportsImages: false });
           if (candidate.provider === 'nvidia') return await streamOpenAI({ ...args, baseURL: 'https://integrate.api.nvidia.com/v1' });
           if (candidate.provider === 'anthropic') return await streamAnthropic(args);
           if (candidate.provider === 'gemini') return await streamGemini(args);
@@ -192,4 +198,4 @@ function formatProviderError(error) {
   return message.slice(0, 600);
 }
 
-module.exports = { createLLM, formatProviderError, getDefaultMaxTokens, isRetryableProviderError, getProviderCandidates };
+module.exports = { buildOpenAIChatMessages, createLLM, formatProviderError, getDefaultMaxTokens, isRetryableProviderError, getProviderCandidates };

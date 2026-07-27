@@ -65,3 +65,25 @@
 
 ### Notes For Next Agent
 - Do not present macOS system-loopback as supported. Follow `README.md` for the required Multi-Output Device route.
+
+## Session Update - 2026-07-27 (latency and Groq payload fix)
+
+### Objective
+- Fix Groq's `messages[1].content must be a string` failure and reduce delayed, inaccurate live transcription.
+
+### Completed
+- Groq text models now always receive string-only chat messages; image payloads are omitted for Groq so screenshot features no longer fail with a 400 error.
+- Added a bounded PCM queue: transcription flushes every 2.2 seconds and processes a maximum four-second audio segment, preserving newer audio for the next pass instead of creating ever-larger, slower requests.
+- Corrected the cloud-speech status text to name Faster-Whisper rather than a nonexistent browser fallback.
+
+### Files Modified
+- `main.js`, `src/llm.js`, `src/audio-buffer.js`
+- `test/providers.test.js`, `test/audio-buffer.test.js`
+
+### Verification
+- `npm test` passed: 24 tests.
+- `node --check main.js` and `node --check src/llm.js` passed.
+- `npm audit --omit=dev --audit-level=high` found 0 production vulnerabilities.
+
+### Pending Work
+- Live provider and device testing still requires the user's own configured key and a real microphone/BlackHole or Loopback source; no API key is stored or printed by development tooling.

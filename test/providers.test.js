@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { formatProviderError, getDefaultMaxTokens, getProviderCandidates, isRetryableProviderError } = require('../src/llm');
+const { buildOpenAIChatMessages, formatProviderError, getDefaultMaxTokens, getProviderCandidates, isRetryableProviderError } = require('../src/llm');
 
 test('treats quota and overload failures as retryable', () => {
   assert.equal(isRetryableProviderError({ status: 429 }), true);
@@ -38,4 +38,14 @@ test('turns provider quota JSON into a useful recovery action', () => {
   assert.match(message, /Gemini free-tier limit reached/);
   assert.match(message, /Retry in 58 seconds/);
   assert.match(message, /Groq key/);
+});
+
+test('keeps Groq chat payloads text-only even when a feature captured a screenshot', () => {
+  const messages = buildOpenAIChatMessages({
+    system: 'Be concise.',
+    turns: [{ role: 'user', text: 'Answer this.' }],
+    imageDataUrl: 'data:image/png;base64,AAAA',
+    supportsImages: false
+  });
+  assert.equal(messages[1].content, 'Answer this.');
 });

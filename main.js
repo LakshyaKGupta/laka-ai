@@ -368,8 +368,10 @@ app.whenReady().then(async () => {
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     if (request.webContents !== win?.webContents) return callback();
     desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
-      if (sources.length) callback({ video: sources[0], audio: 'loopback' });
-      else callback();
+      const response = {};
+      if (sources.length && request.video) response.video = sources[0];
+      if (request.audio) response.audio = 'loopback';
+      callback(Object.keys(response).length ? response : undefined);
     }).catch(() => callback());
   }, { useSystemPicker: false });
 

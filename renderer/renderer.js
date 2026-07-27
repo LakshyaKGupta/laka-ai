@@ -167,9 +167,9 @@
     if (!active) {
       showStatus('Listening started. Only use this where consent is allowed.');
       cue.captureToggle();
-      setTimeout(() => {
-        if (!micStream) startMic();
-      }, 50);
+      requestAnimationFrame(() => {
+        if (!micStream) startMic().catch(() => {});
+      });
     } else {
       showStatus('Listening stopped.');
       cue.captureToggle();
@@ -239,7 +239,7 @@
     try {
       speechRecognition = new recCtor();
       speechRecognition.continuous = true;
-      speechRecognition.interimResults = false;
+      speechRecognition.interimResults = true;
       speechRecognition.maxAlternatives = 1;
       speechRecognition.lang = navigator.language || 'en-US';
       speechRecognition.onresult = (event) => {
@@ -277,7 +277,19 @@
   async function startMic() {
     if (micStream) return;
     try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } });
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          channelCount: 2,
+          sampleRate: 16000
+        }
+      });
+      const useLocalSpeech = !settings?.apiKeyConfigured?.openai && !settings?.apiKeyConfigured?.gemini;
+      if (useLocalSpeech) {
+        requestAnimationFrame(() => startLocalSpeech());
+      }
       audioCtx = new AudioContext({ sampleRate: 16000 });
       await audioCtx.audioWorklet.addModule('./pcm-processor.js');
       micNode = audioCtx.createMediaStreamSource(micStream);
@@ -285,8 +297,6 @@
       micProc.port.onmessage = (e) => cue.micPcm(e.data);
       const sink = audioCtx.createGain(); sink.gain.value = 0; // run processor silently
       micNode.connect(micProc); micProc.connect(sink); sink.connect(audioCtx.destination);
-      const useLocalSpeech = !settings?.apiKeyConfigured?.openai && !settings?.apiKeyConfigured?.gemini;
-      if (useLocalSpeech) startLocalSpeech();
     } catch (err) {
       cue.log('mic error: ' + (err && err.message));
     }
@@ -304,7 +314,12 @@
   async function startSystemAudio() {
     if (sysStream) return;
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getDisplayMedia({ audio: true });
+      } catch (audioErr) {
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      }
       stream.getVideoTracks().forEach((t) => t.stop()); // we only want the audio
       const tracks = stream.getAudioTracks();
       if (!tracks.length) { cue.log('system audio: no loopback track (macOS loopback unsupported here)'); stream.getTracks().forEach((t) => t.stop()); return; }
@@ -316,6 +331,7 @@
       sysProc.port.onmessage = (e) => cue.systemPcm(e.data);
       const sink = sysCtx.createGain(); sink.gain.value = 0;
       sysNode.connect(sysProc); sysProc.connect(sink); sink.connect(sysCtx.destination);
+      showStatus('Speaker audio capture is active where the OS allows it.');
       cue.log('system audio: capturing loopback');
     } catch (err) {
       cue.log('system audio error: ' + (err && err.message));

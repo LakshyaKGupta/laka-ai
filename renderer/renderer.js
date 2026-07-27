@@ -274,6 +274,13 @@
     lastAiText = message;
     if (message) showStatus(message + (message.includes('Settings') ? '' : ' Open Settings with the gear icon to fix it.'));
   });
+  cue.on('transcript', ({ channel, text }) => {
+    const bubble = document.createElement('div');
+    bubble.className = 'transcript-bubble';
+    bubble.textContent = `${channel === 'you' ? 'You' : 'Other speaker'}: ${text}`;
+    messages.appendChild(bubble);
+    scrollMessagesToBottom();
+  });
   let statusTimer = null;
   function showStatus(message) {
     let el = document.getElementById('cue-status');

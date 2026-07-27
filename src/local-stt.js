@@ -114,7 +114,7 @@ class FasterWhisperWorker {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error('Faster-Whisper took too long to transcribe this audio.'));
-      }, 45_000);
+      }, 180_000);
       this.pending.set(id, { resolve, reject, timer });
       try { this.child.stdin.write(JSON.stringify({ id, audio: wav.toString('base64') }) + '\n'); }
       catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }

@@ -12,6 +12,7 @@
 - Chat replies remain visible in the scrollable panel for the current conversation. User questions and AI replies are retained as bounded conversation context; Clear conversation history removes them.
 - Faster-Whisper is an optional local STT fallback. On first use, Laka AI provisions it into its app-data directory and downloads the chosen model; `src/faster_whisper_runner.py` hosts one persistent local worker for later requests.
 - Fast answers skip a new screenshot for typed follow-ups, cap transcript and resume context to 6,000 characters each, and cap fast-mode output at 700 tokens. Settings shows first-token latency after a request.
+- Voice capture now downsamples the actual AudioWorklet rate to 16 kHz before WAV/STT conversion, and renderer transcript events render as scrollable `You` / `Other speaker` bubbles. The original Cue repository was compared: it uses the same browser capture pattern but did not render transcript events.
 
 ## Verification
 
@@ -19,7 +20,7 @@
 - Run `npm run pack` to create `dist/mac-arm64/Laka AI.app` on Apple Silicon.
 - Run `npm start` for the source Electron app.
 - Run `npm test` for the unit suite; GitHub Actions runs install, test, a high-severity production-dependency audit, and macOS packaging.
-- Last local verification: `npm test` passed (19 tests), `npm audit --omit=dev --audit-level=high` found 0 production vulnerabilities, and `npm run pack` completed with ASAR enabled.
+- Last local verification: `npm test` passed (20 tests), `npm audit --omit=dev --audit-level=high` found 0 production vulnerabilities, and `npm run pack` completed with ASAR enabled.
 
 ## Follow-up priorities
 

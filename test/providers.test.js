@@ -27,7 +27,7 @@ test('builds a provider chain that prefers the selected provider and adds config
 });
 
 test('uses a larger token budget so answers are not cut off early', () => {
-  assert.equal(getDefaultMaxTokens({ smart: false }), 2400);
-  assert.equal(getDefaultMaxTokens({ smart: true }), 4000);
+  assert.equal(getDefaultMaxTokens({ smart: false }), 700);
+  assert.equal(getDefaultMaxTokens({ smart: true }), 1400);
   assert.equal(getDefaultMaxTokens({ smart: false, maxTokens: 500 }), 500);
 });

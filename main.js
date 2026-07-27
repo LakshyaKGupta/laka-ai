@@ -178,6 +178,7 @@ function setCapturing(active) {
 
 // -------- feature runner --------
 async function runFeature(mode, userText) {
+  const startedAt = Date.now();
   if (DEBUG) console.log('[DEBUG MAIN] runFeature called:', { mode, userText, isBusy: state.busy });
   if (state.busy) return;
   const def = MODES[mode];
@@ -208,10 +209,13 @@ async function runFeature(mode, userText) {
     }
 
     let imageDataUrl = null;
+    let screenshotMs = 0;
     if (def.needsScreen) {
       if (DEBUG) console.log('[DEBUG MAIN] Feature needs screen. Capturing screenshot...');
       try { 
-        imageDataUrl = await captureScreenshot(); 
+        const screenshotStartedAt = Date.now();
+        imageDataUrl = await captureScreenshot();
+        screenshotMs = Date.now() - screenshotStartedAt;
         if (DEBUG) console.log('[DEBUG MAIN] Screenshot captured successfully (length:', imageDataUrl.length, ')');
       }
       catch (e) { 
@@ -222,11 +226,15 @@ async function runFeature(mode, userText) {
 
     const built = def.build({ transcript, userText: userText || '', ...context });
     if (DEBUG) console.log('[DEBUG MAIN] Built prompt. Starting LLM stream...');
+    let firstTokenAt = 0;
     const fullText = await llm.stream({
       system: def.system,
       turns: [{ role: 'user', text: built }],
       imageDataUrl,
-      onToken: (t) => send('llm:token', { text: t })
+      onToken: (t) => {
+        if (!firstTokenAt) firstTokenAt = Date.now();
+        send('llm:token', { text: t });
+      }
     });
     if (fullText && fullText.trim()) {
       transcript.push({ channel: 'them', text: fullText.trim(), ts: Date.now() });
@@ -234,7 +242,11 @@ async function runFeature(mode, userText) {
       persistTranscriptHistory();
     }
     state.requests += 1;
-    send('usage:update', { requests: state.requests, freeTierOnly: settings.freeTierOnly });
+    send('usage:update', {
+      requests: state.requests,
+      freeTierOnly: settings.freeTierOnly,
+      latency: { firstTokenMs: firstTokenAt ? firstTokenAt - startedAt : null, totalMs: Date.now() - startedAt, screenshotMs, promptChars: built.length }
+    });
     if (DEBUG) console.log('[DEBUG MAIN] Full LLM Output:\n', fullText);
     send('llm:done', {});
   } catch (e) {

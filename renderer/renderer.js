@@ -338,7 +338,8 @@
     return 'Active: ' + settings.provider + ' · keys: ' + (has.join(', ') || 'none set') + ' · transcription: ' + stt;
   }
   function updateUsage() {
-    const text = `${usage.requests || 0} requests this session · ${usage.freeTierOnly ? 'free-tier only is on' : 'paid models may be used'}`;
+    const timing = usage.latency && usage.latency.firstTokenMs ? ` · first token ${(usage.latency.firstTokenMs / 1000).toFixed(1)}s` : '';
+    const text = `${usage.requests || 0} requests this session · ${usage.freeTierOnly ? 'free-tier only is on' : 'paid models may be used'}${timing}`;
     $('#usage-status').textContent = text;
   }
   document.querySelectorAll('#provider-seg button').forEach((b) => b.addEventListener('click', () => {

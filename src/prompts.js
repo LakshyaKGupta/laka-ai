@@ -3,12 +3,12 @@
 
 function formatTranscript(turns, limit) {
   const recent = limit ? turns.slice(-limit) : turns;
-  return recent.map((t) => (t.channel === 'them' ? 'Them: ' : 'You: ') + t.text).join('\n');
+  return recent.map((t) => (t.channel === 'them' ? 'Them: ' : 'You: ') + t.text).join('\n').slice(-6000);
 }
 
 function buildContextBlock(ctx) {
   const fields = [];
-  if (ctx.resumeText) fields.push('Resume evidence (use only this evidence for candidate claims):\n' + ctx.resumeText);
+  if (ctx.resumeText) fields.push('Resume evidence (use only this evidence for candidate claims):\n' + ctx.resumeText.slice(0, 6000));
   if (ctx.company) fields.push('Company: ' + ctx.company);
   if (ctx.role) fields.push('Target role: ' + ctx.role);
   if (ctx.responsibilities) fields.push('Key responsibilities: ' + ctx.responsibilities);
@@ -91,12 +91,12 @@ const MODES = {
 
   // Free-form question typed in the composer. All three inputs as context.
   ask: {
-    needsScreen: true,
+    needsScreen: false,
     userBubble: null, // uses the typed text as the bubble
     small: false,
     system:
-      'You are Laka AI, a concise assistant with access to the user\'s permitted screen and conversation context. ' +
-      'Answer the user\'s question directly and concisely, grounded in what is on screen and what was said. No preamble.',
+      'You are Laka AI, a concise assistant grounded in the user\'s permitted conversation and profile context. ' +
+      'Answer the user\'s question directly, accurately, and concisely. No preamble.',
     build(ctx) {
       const t = formatTranscript(ctx.transcript, 12);
       return (t ? 'Recent conversation:\n' + t + '\n\n' : '') + 'Question: ' + ctx.userText + buildContextBlock(ctx);

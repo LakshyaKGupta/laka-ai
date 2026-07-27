@@ -1,9 +1,9 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { getSpeechMode } = require('../src/stt');
+const { createSTT } = require('../src/stt');
 
-test('prefers local speech fallback when no cloud speech key is configured', () => {
-  assert.equal(getSpeechMode({ apiKeys: {} }), 'local');
-  assert.equal(getSpeechMode({ apiKeys: { gemini: 'abc' } }), 'cloud');
-  assert.equal(getSpeechMode({ apiKeys: { openai: 'abc' } }), 'cloud');
+test('offers Faster-Whisper as the local fallback when no cloud key is configured', () => {
+  const stt = createSTT({ apiKeys: {}, localSpeechEnabled: true, localSpeechModel: 'base.en' });
+  assert.equal(stt.available, true);
+  assert.deepEqual(stt.providers, ['faster-whisper']);
 });

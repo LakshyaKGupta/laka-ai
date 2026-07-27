@@ -10,7 +10,7 @@
     "test": "node --test test/*.test.js",
     "pack": "electron-builder --dir",
     "verify": "npm test && npm run pack",
-    "dist": "electron-builder --mac zip",
+    "dist": "electron-builder --mac dmg zip",
     "dist:win": "electron-builder --win"
   },
   "build": {
@@ -20,7 +20,8 @@
     "asar": true,
     "asarUnpack": [
       "node_modules/pdf-parse/**",
-      "node_modules/pdfjs-dist/**"
+      "node_modules/pdfjs-dist/**",
+      "src/faster_whisper_runner.py"
     ],
     "files": [
       "main.js",
@@ -30,7 +31,9 @@
     ],
     "mac": {
       "target": [
-        "dir"
+        "dir",
+        "dmg",
+        "zip"
       ],
       "category": "public.app-category.productivity",
       "icon": "build/icon.icns",

@@ -40,6 +40,8 @@
           </div>
           <div id="composer-bottom">
             <button id="smart-toggle" class="smart-pill"><span class="ic"></span><span>Smart</span></button>
+            <button id="paste-btn" class="more-btn" title="Paste from clipboard">⎘</button>
+            <button id="copy-btn" class="more-btn" title="Copy last reply">⧉</button>
             <button id="more-btn" class="more-btn" title="Settings"></button>
             <button id="zoom-out-btn" class="more-btn" title="Zoom Out" style="font-size: 18px; font-family: monospace; line-height: 1;">-</button>
             <button id="zoom-in-btn" class="more-btn" title="Zoom In" style="font-size: 16px; font-family: monospace; line-height: 1;">+</button>
@@ -71,6 +73,7 @@
         <div class="s-field"><span>OpenAI</span><input id="key-openai" type="password" placeholder="sk-..." autocomplete="off" /></div>
         <div class="s-field"><span>Anthropic</span><input id="key-anthropic" type="password" placeholder="sk-ant-..." autocomplete="off" /></div>
         <div class="s-field"><span>Gemini</span><input id="key-gemini" type="password" placeholder="AIza..." autocomplete="off" /></div>
+        <div class="s-hint" style="margin:-4px 0 10px 0;">Paste your own Gemini key here if you want to avoid free-tier limits and get faster, more reliable replies.</div>
         <div class="s-field"><span>Nvidia</span><input id="key-nvidia" type="password" placeholder="nvapi-..." autocomplete="off" /></div>
 
         <label class="s-label">Models <span class="s-hint">fast = Smart off · smart = Smart on</span></label>
@@ -80,6 +83,11 @@
         <label class="s-label">Cost control</label>
         <label class="s-check"><input id="free-tier-only" type="checkbox" /> Free-tier only (Gemini free models)</label>
         <div class="s-usage" id="usage-status"></div>
+
+        <label class="s-label">Local voice fallback</label>
+        <label class="s-check"><input id="local-speech-enabled" type="checkbox" /> Use Faster-Whisper when cloud transcription fails</label>
+        <div class="s-field"><span>Model</span><select id="local-speech-model"><option value="tiny.en">Tiny (fastest)</option><option value="base.en">Base (recommended)</option><option value="small.en">Small (more accurate)</option><option value="medium.en">Medium (slowest)</option></select></div>
+        <div class="s-hint">One-time setup: <code>python3 -m pip install faster-whisper</code>. The model downloads on first use.</div>
 
         <label class="s-label">Local profile <span class="s-hint">no cloud account required</span></label>
         <label class="s-check"><input id="remember-profile" type="checkbox" /> I agree to securely store this profile and resume on this Mac</label>
@@ -94,6 +102,7 @@
         <button id="clear-history" class="s-secondary" type="button">Clear conversation history</button>
         <button id="quit-app" class="s-danger" type="button">Quit Laka AI</button>
 
+        <button id="request-permissions" class="s-secondary" type="button">Request microphone permission</button>
         <div class="s-status" id="s-status"></div>
       </div>
     </div>

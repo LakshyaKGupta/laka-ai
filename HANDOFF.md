@@ -9,17 +9,19 @@
 - Resume uploads, company, role, and responsibilities remain session-only by default. When the user explicitly opts into the Local profile checkbox, the profile and resume are encrypted with macOS Keychain before being persisted.
 - Free-tier-only is on by default and permits only the configured Gemini free-tier models. The Settings view shows a per-session request count.
 - Settings includes **Quit Laka AI**. GitHub Actions includes CI plus a tag-triggered macOS release workflow; see `docs/RELEASE.md` for required Apple and GitHub secrets.
+- Chat replies remain visible in the scrollable panel for the current conversation. User questions and AI replies are retained as bounded conversation context; Clear conversation history removes them.
+- Faster-Whisper is an optional local STT fallback. Install it with `python3 -m pip install faster-whisper`; `src/faster_whisper_runner.py` hosts one persistent local worker and downloads the chosen model at first use.
 
 ## Verification
 
 - Run `npm ci` to install from the lockfile.
 - Run `npm run pack` to create `dist/mac-arm64/Laka AI.app` on Apple Silicon.
 - Run `npm start` for the source Electron app.
-- Run `npm test` for the unit suite; GitHub Actions runs install, test, high-severity audit, and macOS packaging.
-- Last local verification: `npm test` passed (7 tests), `npm audit --audit-level=high` found 0 vulnerabilities, and `npm run pack` completed with ASAR enabled.
+- Run `npm test` for the unit suite; GitHub Actions runs install, test, a high-severity production-dependency audit, and macOS packaging.
+- Last local verification: `npm test` passed (16 tests), `npm audit --omit=dev --audit-level=high` found 0 production vulnerabilities, and `npm run pack` completed with ASAR enabled.
 
 ## Follow-up priorities
 
 1. For a distributable build, configure a Developer ID Application certificate (`CSC_LINK`/`CSC_KEY_PASSWORD`) and Apple notarization secrets (`APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`). The build script is ready but deliberately skips without these credentials.
 2. Add integration tests for actual provider streaming using test keys stored in the CI secret store.
-3. Add an optional persistent, encrypted resume profile only if the user asks for it; current resume context intentionally ends when the app closes.
+3. Bundle a managed Python runtime and Faster-Whisper model if local fallback must work on user machines without the one-time Python installation.

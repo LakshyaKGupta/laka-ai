@@ -12,6 +12,22 @@ function sanitizeAskPayload(payload) {
   return { mode: payload.mode, text: boundedText(payload.text) };
 }
 
+function getSetupStatus(settings = {}) {
+  const provider = settings.provider || 'gemini';
+  const apiKeys = settings.apiKeys || {};
+  const models = settings.models || {};
+  const providerModels = models[provider] || {};
+  const hasKey = Boolean(apiKeys[provider]);
+  const hasModel = Boolean(providerModels.fast || providerModels.smart);
+  return {
+    provider,
+    hasKey,
+    hasModel,
+    ready: hasKey && hasModel,
+    message: !hasKey ? `Add a ${provider} API key in Settings to start.` : !hasModel ? `Choose a model for ${provider} in Settings.` : ''
+  };
+}
+
 function sanitizeSettingsPatch(patch) {
   if (!patch || typeof patch !== 'object') return {};
   const result = {};
@@ -19,6 +35,8 @@ function sanitizeSettingsPatch(patch) {
   if (typeof patch.smart === 'boolean') result.smart = patch.smart;
   if (typeof patch.freeTierOnly === 'boolean') result.freeTierOnly = patch.freeTierOnly;
   if (typeof patch.onboarded === 'boolean') result.onboarded = patch.onboarded;
+  if (typeof patch.localSpeechEnabled === 'boolean') result.localSpeechEnabled = patch.localSpeechEnabled;
+  if (['tiny.en', 'base.en', 'small.en', 'medium.en'].includes(patch.localSpeechModel)) result.localSpeechModel = patch.localSpeechModel;
   if (patch.models && typeof patch.models === 'object') {
     result.models = {};
     for (const provider of PROVIDERS) {
@@ -43,4 +61,4 @@ function toPcmBuffer(value) {
   return Buffer.from(value);
 }
 
-module.exports = { MAX_PCM_BYTES, PROVIDERS, boundedText, sanitizeAskPayload, sanitizeSettingsPatch, toPcmBuffer };
+module.exports = { MAX_PCM_BYTES, PROVIDERS, boundedText, getSetupStatus, sanitizeAskPayload, sanitizeSettingsPatch, toPcmBuffer };

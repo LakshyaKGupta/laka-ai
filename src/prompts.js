@@ -16,6 +16,17 @@ function buildContextBlock(ctx) {
   return '\n\nCandidate and role context:\n' + fields.join('\n') + '\nDo not invent experience, achievements, company facts, or qualifications. If context is missing, say so briefly. Keep the answer accurate, concrete, and concise.';
 }
 
+function formatStructuredReply(text) {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) return trimmed;
+  const normalized = trimmed.replace(/^\s+|\s+$/g, '');
+  if (/^\d+\./.test(normalized) || /^[-*]\s/.test(normalized)) return normalized;
+  const lines = normalized.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length <= 2) return normalized;
+  const bullets = lines.map((line) => `- ${line}`);
+  return bullets.join('\n');
+}
+
 const MODES = {
   // One-shot "do the smart thing". Uses screen + recent transcript.
   assist: {
@@ -105,4 +116,4 @@ const MODES = {
   }
 };
 
-module.exports = { MODES, buildContextBlock, formatTranscript };
+module.exports = { MODES, buildContextBlock, formatTranscript, formatStructuredReply };

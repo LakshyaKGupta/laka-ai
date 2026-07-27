@@ -58,12 +58,14 @@
   }
 
   function clearMessages() { messages.innerHTML = ''; aiEl = null; caretEl = null; lastAiText = ''; }
+  function scrollMessagesToBottom() { messages.scrollTop = messages.scrollHeight; }
 
   function addUserBubble(text) {
     const b = document.createElement('div');
     b.className = 'user-bubble';
     b.textContent = text;
     messages.appendChild(b);
+    scrollMessagesToBottom();
   }
 
   function startAi(small) {
@@ -74,6 +76,7 @@
     caretEl.className = 'ai-caret';
     aiEl.appendChild(caretEl);
     messages.appendChild(aiEl);
+    scrollMessagesToBottom();
   }
 
   function appendToken(t) {
@@ -83,6 +86,7 @@
     span.className = 'w';
     span.textContent = t;
     aiEl.insertBefore(span, caretEl);
+    scrollMessagesToBottom();
   }
 
   function finalizeAi() {
@@ -92,6 +96,7 @@
     lastAiText = structured;
     aiEl.innerHTML = renderMarkdown(structured);
     aiEl = null; caretEl = null;
+    scrollMessagesToBottom();
   }
 
   function setBusy(v) { busy = v; $('#send-btn').classList.toggle('busy', v); }
@@ -178,101 +183,6 @@
 
   // ---- capture: mic (renderer side) --------------------------------------
   let audioCtx = null, micStream = null, micNode = null, micProc = null;
-  let speechRecognition = null;
-  let localSpeechActive = false;
-  let localSpeechBuffer = '';
-  let localSpeechCommitTimer = null;
-  let localSpeechLastCommitted = '';
-
-  function normalizeSpeechText(text) {
-    return String(text || '')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .replace(/\b([a-z])([A-Z])/g, '$1 $2')
-      .replace(/\s([,.!?;:])/g, '$1')
-      .replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '')
-      .trim();
-  }
-
-  function commitLocalSpeechBuffer() {
-    const text = normalizeSpeechText(localSpeechBuffer);
-    if (!text || text.toLowerCase() === localSpeechLastCommitted.toLowerCase()) {
-      localSpeechBuffer = '';
-      return;
-    }
-    localSpeechLastCommitted = text;
-    localSpeechBuffer = '';
-    addUserBubble(text);
-    cue.transcriptAdd(text);
-    showStatus('Voice captured locally.');
-  }
-
-  function queueLocalSpeechText(text) {
-    const cleaned = normalizeSpeechText(text);
-    if (!cleaned) return;
-    if (cleaned.toLowerCase() === localSpeechLastCommitted.toLowerCase()) return;
-    localSpeechBuffer = localSpeechBuffer ? `${localSpeechBuffer} ${cleaned}` : cleaned;
-    if (localSpeechBuffer.length > 280) {
-      commitLocalSpeechBuffer();
-      return;
-    }
-    clearTimeout(localSpeechCommitTimer);
-    localSpeechCommitTimer = setTimeout(commitLocalSpeechBuffer, 500);
-  }
-
-  function stopLocalSpeech() {
-    clearTimeout(localSpeechCommitTimer);
-    commitLocalSpeechBuffer();
-    if (speechRecognition) {
-      try { speechRecognition.stop(); } catch (_) {}
-      speechRecognition.onresult = null;
-      speechRecognition.onerror = null;
-      speechRecognition.onend = null;
-      speechRecognition = null;
-    }
-    localSpeechActive = false;
-  }
-
-  function startLocalSpeech() {
-    const recCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!recCtor || localSpeechActive || !micStream) return;
-    try {
-      speechRecognition = new recCtor();
-      speechRecognition.continuous = true;
-      speechRecognition.interimResults = true;
-      speechRecognition.maxAlternatives = 1;
-      speechRecognition.lang = navigator.language || 'en-US';
-      speechRecognition.onresult = (event) => {
-        const finals = [];
-        for (let i = event.resultIndex || 0; i < event.results.length; i += 1) {
-          const result = event.results[i];
-          if (result.isFinal && result[0] && result[0].transcript) finals.push(result[0].transcript);
-        }
-        if (finals.length) queueLocalSpeechText(finals.join(' '));
-      };
-      speechRecognition.onerror = (event) => {
-        if (event.error !== 'no-speech' && event.error !== 'aborted') {
-          showStatus('Local voice fallback had trouble hearing you.');
-        }
-        stopLocalSpeech();
-      };
-      speechRecognition.onend = () => {
-        if (localSpeechActive && micStream) {
-          setTimeout(() => {
-            try { speechRecognition?.start(); } catch (_) {}
-          }, 250);
-        }
-      };
-      speechRecognition.onstart = () => {
-        localSpeechActive = true;
-        showStatus('Local voice fallback is active.');
-      };
-      speechRecognition.start();
-    } catch (err) {
-      cue.log('local speech error: ' + (err && err.message));
-      stopLocalSpeech();
-    }
-  }
 
   async function startMic() {
     if (micStream) return;
@@ -286,10 +196,6 @@
           sampleRate: 16000
         }
       });
-      const useLocalSpeech = !settings?.apiKeyConfigured?.openai && !settings?.apiKeyConfigured?.gemini;
-      if (useLocalSpeech) {
-        requestAnimationFrame(() => startLocalSpeech());
-      }
       audioCtx = new AudioContext({ sampleRate: 16000 });
       await audioCtx.audioWorklet.addModule('./pcm-processor.js');
       micNode = audioCtx.createMediaStreamSource(micStream);
@@ -305,7 +211,6 @@
     if (micProc) { micProc.port.onmessage = null; micProc.disconnect(); micProc = null; }
     if (micNode) { micNode.disconnect(); micNode = null; }
     if (audioCtx) { audioCtx.close(); audioCtx = null; }
-    stopLocalSpeech();
     if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
   }
 
@@ -357,7 +262,6 @@
     }
   });
   cue.on('llm:start', ({ userBubble, small }) => {
-    clearMessages();
     if (userBubble) addUserBubble(userBubble);
     startAi(!!small);
     setBusy(true);
@@ -386,9 +290,6 @@
   }
   cue.on('status', ({ message }) => {
     cue.log('[status] ' + message);
-    if (/speech is temporarily unavailable|no transcription key set/i.test(message)) {
-      startLocalSpeech();
-    }
     showStatus(message);
   });
   cue.on('usage:update', (next) => { usage = next; updateUsage(); });
@@ -400,6 +301,11 @@
   $('#more-btn').addEventListener('click', openSettings);
   $('#s-close').addEventListener('click', closeSettings);
   scrim.addEventListener('click', (e) => { if (e.target === scrim) closeSettings(); });
+
+  $('#request-permissions').addEventListener('click', () => {
+    showStatus('Requesting microphone permission…');
+    cue.requestPermissions();
+  });
 
   function fillSettings() {
     document.querySelectorAll('#provider-seg button').forEach((b) => b.classList.toggle('on', b.dataset.provider === settings.provider));
@@ -414,6 +320,8 @@
     const m = settings.models[settings.provider] || { fast: '', smart: '' };
     $('#model-fast').value = m.fast; $('#model-smart').value = m.smart;
     $('#free-tier-only').checked = !!settings.freeTierOnly;
+    $('#local-speech-enabled').checked = settings.localSpeechEnabled !== false;
+    $('#local-speech-model').value = settings.localSpeechModel || 'base.en';
     $('#remember-profile').checked = !!profile.enabled;
     $('#display-name').value = $('#display-name').value || profile.displayName || '';
     $('#company').value = $('#company').value || profile.company || '';
@@ -451,7 +359,7 @@
     if (!settings.models[settings.provider]) settings.models[settings.provider] = {};
     settings.models[settings.provider].fast = $('#model-fast').value.trim();
     settings.models[settings.provider].smart = $('#model-smart').value.trim();
-    settings = await cue.settingsSet({ provider: settings.provider, models: settings.models, apiKeys, freeTierOnly: $('#free-tier-only').checked });
+    settings = await cue.settingsSet({ provider: settings.provider, models: settings.models, apiKeys, freeTierOnly: $('#free-tier-only').checked, localSpeechEnabled: $('#local-speech-enabled').checked, localSpeechModel: $('#local-speech-model').value });
     const contextPatch = { company: $('#company').value, role: $('#role').value, responsibilities: $('#responsibilities').value };
     await cue.contextSet(contextPatch);
     profile = await cue.profileSet({ displayName: $('#display-name').value, ...contextPatch }, $('#remember-profile').checked);
@@ -466,7 +374,7 @@
     } else if (result && result.error) showStatus(result.error);
   });
   $('#clear-history').addEventListener('click', async () => {
-    if (await cue.historyClear()) showStatus('Conversation history cleared.');
+    if (await cue.historyClear()) { clearMessages(); showStatus('Conversation history cleared.'); }
   });
   $('#quit-app').addEventListener('click', () => cue.quit());
 

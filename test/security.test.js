@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { sanitizeAskPayload, sanitizeSettingsPatch, toPcmBuffer } = require('../src/validators');
+const { getSetupStatus, sanitizeAskPayload, sanitizeSettingsPatch, toPcmBuffer } = require('../src/validators');
 
 test('accepts a bounded known feature request', () => {
   assert.deepEqual(sanitizeAskPayload({ mode: 'ask', text: 'Summarize this.' }), { mode: 'ask', text: 'Summarize this.' });
@@ -14,5 +14,14 @@ test('rejects unknown modes and oversized audio', () => {
 test('only allows supported settings fields and non-empty replacement keys', () => {
   assert.deepEqual(sanitizeSettingsPatch({ provider: 'gemini', smart: true, onboarded: true, apiKeys: { gemini: 'key' }, ignored: true }), {
     provider: 'gemini', smart: true, onboarded: true, apiKeys: { gemini: 'key' }
+  });
+});
+
+test('reports missing setup clearly when the provider key or model is missing', () => {
+  assert.deepEqual(getSetupStatus({ provider: 'gemini', apiKeys: {}, models: { gemini: { fast: 'gemini-3.1-flash-lite' } } }), {
+    provider: 'gemini', hasKey: false, hasModel: true, ready: false, message: 'Add a gemini API key in Settings to start.'
+  });
+  assert.deepEqual(getSetupStatus({ provider: 'gemini', apiKeys: { gemini: 'key' }, models: { gemini: {} } }), {
+    provider: 'gemini', hasKey: true, hasModel: false, ready: false, message: 'Choose a model for gemini in Settings.'
   });
 });

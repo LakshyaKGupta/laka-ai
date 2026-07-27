@@ -81,6 +81,16 @@ Laka AI uses **your own** API key. Click the **`...`** button in the input box (
 
 Your API keys are encrypted with macOS Keychain and the settings file retains only encrypted ciphertext. They are sent only to the provider you choose. Laka AI has no server and collects nothing.
 
+### Optional local speech fallback
+
+Laka AI can fall back to [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) when cloud transcription is unavailable. Install it once on the Mac running Laka AI:
+
+```bash
+python3 -m pip install faster-whisper
+```
+
+Enable it in **Settings → Local voice fallback**. The selected model downloads on its first use; **Base** is the recommended speed/accuracy balance. This feature runs locally and does not send fallback audio to an AI provider.
+
 ### Step 3 — Use with consent
 
 Before using Laka AI with screen or audio input, ensure every participant and the platform allow it. Visibility in screen recordings or screen shares is not guaranteed.
@@ -147,6 +157,7 @@ Right-click the local app bundle and choose **Open**, or build it again with `np
 - No accounts, no servers, no telemetry. Laka AI collects nothing.
 - Your API keys are encrypted in macOS Keychain; `laka-ai-data.json` holds only encrypted values and non-secret preferences.
 - Screenshots and audio are sent to your AI provider only when a feature runs, and are not stored by Laka AI beyond the current session's transcript (kept in memory).
+- When enabled, Faster-Whisper runs locally on your Mac and processes temporary audio files only for the duration of transcription.
 
 ## Contributing
 

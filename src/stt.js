@@ -3,6 +3,7 @@
 // fall back across providers. Returns { text, provider } or { text:'', error }.
 const { pcmToWav } = require('./wav');
 const { isRetryableProviderError } = require('./llm');
+const { transcribeLocal } = require('./local-stt');
 
 async function transcribeOpenAI(apiKey, wav, model) {
   const OpenAI = require('openai');
@@ -28,7 +29,7 @@ async function transcribeGemini(apiKey, wav) {
 
 function getSpeechMode(settings) {
   const keys = settings && settings.apiKeys ? settings.apiKeys : {};
-  return keys.openai || keys.gemini ? 'cloud' : 'local';
+  return keys.openai || keys.gemini ? 'cloud-with-local-fallback' : 'local';
 }
 
 function createSTT(settings) {
@@ -36,9 +37,10 @@ function createSTT(settings) {
   const chain = [];
   if (keys.openai) chain.push({ p: 'openai', fn: (wav) => transcribeOpenAI(keys.openai, wav, settings.sttModel) });
   if (keys.gemini) chain.push({ p: 'gemini', fn: (wav) => transcribeGemini(keys.gemini, wav) });
+  if (settings.localSpeechEnabled !== false) chain.push({ p: 'faster-whisper', fn: (wav) => transcribeLocal(wav, settings) });
 
   return {
-    available: chain.length > 0 || getSpeechMode(settings) === 'local',
+    available: chain.length > 0,
     providers: chain.map((c) => c.p),
     mode: getSpeechMode(settings),
     async transcribe(pcm) {
@@ -52,7 +54,8 @@ function createSTT(settings) {
         } catch (e) {
           const err = { status: e && e.status, code: e && e.code, message: (e && e.message) || String(e), provider: c.p };
           lastErr = err;
-          if (!isRetryableProviderError(e)) break;
+          // Cloud providers can reject a key or hit quota; keep the local fallback available.
+          if (c.p === 'faster-whisper' || !isRetryableProviderError(e)) continue;
         }
       }
       return { text: '', error: lastErr };

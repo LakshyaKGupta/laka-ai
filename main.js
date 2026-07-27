@@ -49,14 +49,6 @@ async function requestInitialPermissions() {
   } catch (error) {
     console.log('[permissions] microphone prompt skipped', error && error.message);
   }
-  try {
-    const { systemPreferences } = require('electron');
-    if (typeof systemPreferences.askForMediaAccess === 'function') {
-      await systemPreferences.askForMediaAccess('screen');
-    }
-  } catch (error) {
-    console.log('[permissions] screen prompt skipped', error && error.message);
-  }
 }
 
 function createWindow() {
@@ -149,7 +141,9 @@ function handleSttError(err) {
   const noAccess = err.status === 403 || err.status === 401 || err.code === 'model_not_found';
   const quotaIssue = err.status === 429 || err.status === 503 || /quota|rate limit|exceeded|overload|unavailable|retry/i.test(err.message || '');
   sttDisabled = true; // stop hammering the API every few seconds
-  if (noAccess) {
+  if (err.provider === 'faster-whisper') {
+    send('status', { message: 'Faster-Whisper is not ready. Run the local setup command in Settings, then restart Laka AI.' });
+  } else if (noAccess) {
     send('status', { message: 'Transcription is off for ' + err.provider + ' because the key does not have speech access. Add a Gemini or OpenAI key in Settings and reopen to enable listening.' });
   } else if (quotaIssue) {
     send('status', { message: 'Cloud speech is temporarily unavailable for ' + err.provider + '. Local voice fallback will be used if your browser supports it.' });
@@ -191,6 +185,11 @@ async function runFeature(mode, userText) {
   }
   state.busy = true;
   try {
+    if (mode === 'ask' && userText && userText.trim()) {
+      transcript.push({ channel: 'you', text: userText.trim(), ts: Date.now() });
+      while (transcript.length > MAX_TRANSCRIPT_TURNS) transcript.shift();
+      persistTranscriptHistory();
+    }
     const settings = store.getSettings();
     const llm = createLLM(settings);
     const userBubble = def.userBubble !== null ? def.userBubble : (mode === 'ask' ? userText : null);
@@ -338,6 +337,16 @@ ipcMain.on('mouse:ignore', (event, value) => { if (isTrustedRenderer(event) && t
 ipcMain.on('open-pane', (event, url) => {
   const allowed = new Set(['x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture', 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone']);
   if (isTrustedRenderer(event) && allowed.has(url)) shell.openExternal(url).catch(() => {});
+});
+ipcMain.handle('permissions:request', async (event) => {
+  if (!isTrustedRenderer(event)) return false;
+  try {
+    await requestInitialPermissions();
+    return true;
+  } catch (error) {
+    console.log('[permissions] request failed', error && error.message);
+    return false;
+  }
 });
 ipcMain.on('log', (event, msg) => {
   if (!isTrustedRenderer(event) || typeof msg !== 'string') return;

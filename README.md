@@ -83,13 +83,7 @@ Your API keys are encrypted with macOS Keychain and the settings file retains on
 
 ### Optional local speech fallback
 
-Laka AI can fall back to [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) when cloud transcription is unavailable. Install it once on the Mac running Laka AI:
-
-```bash
-python3 -m pip install faster-whisper
-```
-
-Enable it in **Settings → Local voice fallback**. The selected model downloads on its first use; **Base** is the recommended speed/accuracy balance. This feature runs locally and does not send fallback audio to an AI provider.
+Laka AI can fall back to [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) when cloud transcription is unavailable. Enable it in **Settings → Local voice fallback**. On first use, Laka AI installs the Python package into its own app-data folder and downloads the selected model; later launches reuse that cached runtime and model. **Base** is the recommended speed/accuracy balance. This feature runs locally and does not send fallback audio to an AI provider.
 
 ### Step 3 — Use with consent
 

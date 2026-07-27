@@ -110,6 +110,8 @@ async function flushChannel(channel) {
   state.transcribing[channel] = true;
   try {
     const settings = store.getSettings();
+    settings.localSpeechRuntimeDir = path.join(app.getPath('userData'), 'faster-whisper-python');
+    settings.onLocalStatus = (message) => send('status', { message });
     const stt = createSTT(settings);
     if (!stt.available) {
       if (!sttDisabled) { sttDisabled = true; send('status', { message: 'No transcription key set. Add a Gemini or OpenAI key in Settings to enable listening. Screen-based features work without it.' }); }
@@ -142,7 +144,7 @@ function handleSttError(err) {
   const quotaIssue = err.status === 429 || err.status === 503 || /quota|rate limit|exceeded|overload|unavailable|retry/i.test(err.message || '');
   sttDisabled = true; // stop hammering the API every few seconds
   if (err.provider === 'faster-whisper') {
-    send('status', { message: 'Faster-Whisper is not ready. Run the local setup command in Settings, then restart Laka AI.' });
+    send('status', { message: 'Faster-Whisper could not finish automatic setup. Check your internet connection, then start listening again.' });
   } else if (noAccess) {
     send('status', { message: 'Transcription is off for ' + err.provider + ' because the key does not have speech access. Add a Gemini or OpenAI key in Settings and reopen to enable listening.' });
   } else if (quotaIssue) {

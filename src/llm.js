@@ -113,7 +113,7 @@ async function streamGemini({ apiKey, model, system, turns, imageDataUrl, maxTok
 
 function getDefaultMaxTokens(settings) {
   if (typeof settings?.maxTokens === 'number' && settings.maxTokens > 0) return settings.maxTokens;
-  return settings?.smart ? 1400 : 700;
+  return settings?.smart ? 900 : 450;
 }
 
 function isRetryableProviderError(error) {

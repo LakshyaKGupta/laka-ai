@@ -349,6 +349,7 @@
     $('#free-tier-only').checked = !!settings.freeTierOnly;
     $('#local-speech-enabled').checked = settings.localSpeechEnabled !== false;
     $('#local-speech-model').value = settings.localSpeechModel || 'base.en';
+    $('#speech-language').value = settings.speechLanguage || 'auto';
     $('#meeting-audio-device').value = settings.meetingAudioDeviceId || '';
     $('#remember-profile').checked = !!profile.enabled;
     $('#display-name').value = $('#display-name').value || profile.displayName || '';
@@ -388,7 +389,7 @@
     if (!settings.models[settings.provider]) settings.models[settings.provider] = {};
     settings.models[settings.provider].fast = $('#model-fast').value.trim();
     settings.models[settings.provider].smart = $('#model-smart').value.trim();
-    settings = await cue.settingsSet({ provider: settings.provider, models: settings.models, apiKeys, freeTierOnly: $('#free-tier-only').checked, localSpeechEnabled: $('#local-speech-enabled').checked, localSpeechModel: $('#local-speech-model').value, meetingAudioDeviceId: $('#meeting-audio-device').value });
+    settings = await cue.settingsSet({ provider: settings.provider, models: settings.models, apiKeys, freeTierOnly: $('#free-tier-only').checked, localSpeechEnabled: $('#local-speech-enabled').checked, localSpeechModel: $('#local-speech-model').value, speechLanguage: $('#speech-language').value, meetingAudioDeviceId: $('#meeting-audio-device').value });
     const contextPatch = { company: $('#company').value, role: $('#role').value, responsibilities: $('#responsibilities').value };
     await cue.contextSet(contextPatch);
     profile = await cue.profileSet({ displayName: $('#display-name').value, ...contextPatch }, $('#remember-profile').checked);

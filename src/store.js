@@ -4,7 +4,7 @@ const electron = require('electron');
 const { PROVIDERS, sanitizeSettingsPatch } = require('./validators');
 
 const DEFAULTS = {
-  provider: 'gemini', smart: false, freeTierOnly: true, localSpeechEnabled: true, localSpeechModel: 'base.en', meetingAudioDeviceId: '', encryptedApiKeys: {}, encryptedProfile: '', profileEnabled: false, transcriptHistory: [],
+  provider: 'gemini', smart: false, freeTierOnly: true, localSpeechEnabled: true, localSpeechModel: 'base.en', speechLanguage: 'auto', meetingAudioDeviceId: '', encryptedApiKeys: {}, encryptedProfile: '', profileEnabled: false, transcriptHistory: [],
   models: {
     openai: { fast: 'gpt-4o-mini', smart: 'gpt-4o' },
     anthropic: { fast: 'claude-3-5-haiku-latest', smart: 'claude-3-5-sonnet-latest' },

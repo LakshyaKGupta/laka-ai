@@ -19,7 +19,8 @@ def main():
             with tempfile.NamedTemporaryFile(suffix=".wav") as source:
                 source.write(audio)
                 source.flush()
-                segments, _ = model.transcribe(source.name, vad_filter=True)
+                language = request.get("language") or None
+                segments, _ = model.transcribe(source.name, vad_filter=True, language=language)
                 response["text"] = " ".join(segment.text.strip() for segment in segments).strip()
         except Exception as error:
             response["error"] = str(error)

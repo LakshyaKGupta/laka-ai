@@ -107,7 +107,7 @@ class FasterWhisperWorker {
     this.pending.clear();
   }
 
-  async transcribe(wav) {
+  async transcribe(wav, language = '') {
     await this.start();
     return new Promise((resolve, reject) => {
       const id = this.nextId++;
@@ -116,7 +116,7 @@ class FasterWhisperWorker {
         reject(new Error('Faster-Whisper took too long to transcribe this audio.'));
       }, 180_000);
       this.pending.set(id, { resolve, reject, timer });
-      try { this.child.stdin.write(JSON.stringify({ id, audio: wav.toString('base64') }) + '\n'); }
+      try { this.child.stdin.write(JSON.stringify({ id, audio: wav.toString('base64'), language }) + '\n'); }
       catch (error) { clearTimeout(timer); this.pending.delete(id); reject(error); }
     });
   }
@@ -126,7 +126,7 @@ let worker = null;
 function transcribeLocal(wav, settings = {}) {
   const model = normalizeModel(settings.localSpeechModel);
   if (!worker || worker.model !== model) worker = new FasterWhisperWorker({ model, isPackaged: Boolean(process.resourcesPath && __dirname.includes('app.asar')), runtimeDir: settings.localSpeechRuntimeDir, onStatus: settings.onLocalStatus });
-  return worker.transcribe(wav);
+  return worker.transcribe(wav, settings.speechLanguage || '');
 }
 
 module.exports = { FasterWhisperWorker, normalizeModel, pipInstallArgs, runnerPath, runtimeEnv, transcribeLocal };

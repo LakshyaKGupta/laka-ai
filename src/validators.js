@@ -37,6 +37,7 @@ function sanitizeSettingsPatch(patch) {
   if (typeof patch.onboarded === 'boolean') result.onboarded = patch.onboarded;
   if (typeof patch.localSpeechEnabled === 'boolean') result.localSpeechEnabled = patch.localSpeechEnabled;
   if (['tiny.en', 'base.en', 'small.en', 'medium.en', 'tiny', 'base', 'small', 'medium'].includes(patch.localSpeechModel)) result.localSpeechModel = patch.localSpeechModel;
+  if (['auto', 'en', 'hi', 'es', 'fr', 'de', 'pt', 'ja', 'ko', 'zh'].includes(patch.speechLanguage)) result.speechLanguage = patch.speechLanguage;
   if (typeof patch.meetingAudioDeviceId === 'string') result.meetingAudioDeviceId = boundedText(patch.meetingAudioDeviceId, 512);
   if (patch.models && typeof patch.models === 'object') {
     result.models = {};

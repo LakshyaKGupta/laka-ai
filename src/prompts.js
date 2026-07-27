@@ -3,12 +3,12 @@
 
 function formatTranscript(turns, limit) {
   const recent = limit ? turns.slice(-limit) : turns;
-  return recent.map((t) => (t.channel === 'them' ? 'Them: ' : 'You: ') + t.text).join('\n').slice(-6000);
+  return recent.map((t) => (t.channel === 'them' ? 'Them: ' : 'You: ') + t.text).join('\n').slice(-4000);
 }
 
 function buildContextBlock(ctx) {
   const fields = [];
-  if (ctx.resumeText) fields.push('Resume evidence (use only this evidence for candidate claims):\n' + ctx.resumeText.slice(0, 6000));
+  if (ctx.resumeText) fields.push('Resume evidence (use only this evidence for candidate claims):\n' + ctx.resumeText.slice(0, 3500));
   if (ctx.company) fields.push('Company: ' + ctx.company);
   if (ctx.role) fields.push('Target role: ' + ctx.role);
   if (ctx.responsibilities) fields.push('Key responsibilities: ' + ctx.responsibilities);

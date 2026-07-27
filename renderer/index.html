@@ -89,7 +89,8 @@
         <label class="s-label">Local voice fallback</label>
         <label class="s-check"><input id="local-speech-enabled" type="checkbox" /> Use Faster-Whisper when cloud transcription fails</label>
         <div class="s-field"><span>Model</span><select id="local-speech-model"><option value="tiny.en">Tiny English (fastest)</option><option value="base.en">Base English (recommended for English)</option><option value="small.en">Small English (more accurate)</option><option value="medium.en">Medium English (slowest)</option><option value="base">Base multilingual</option><option value="small">Small multilingual (more accurate)</option><option value="medium">Medium multilingual (slowest)</option></select></div>
-        <div class="s-hint">Choose a multilingual model for Hindi or mixed-language meetings. Laka AI installs it once in its app-data folder; the model downloads on first use.</div>
+        <div class="s-field"><span>Language</span><select id="speech-language"><option value="auto">Auto-detect</option><option value="en">English (faster)</option><option value="hi">Hindi</option><option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option><option value="pt">Portuguese</option><option value="ja">Japanese</option><option value="ko">Korean</option><option value="zh">Chinese</option></select></div>
+        <div class="s-hint">Choose English to avoid language detection delay, or a multilingual model and language for Hindi/mixed-language meetings. Laka AI installs it once in its app-data folder; the model downloads on first use.</div>
 
         <label class="s-label">Meeting audio <span class="s-hint">remote participants</span></label>
         <div class="s-field"><span>Audio input</span><select id="meeting-audio-device"><option value="">Choose BlackHole or Loopback</option></select></div>

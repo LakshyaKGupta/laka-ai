@@ -11,7 +11,7 @@
 - Settings includes **Quit Laka AI**. GitHub Actions includes CI plus a tag-triggered macOS release workflow; see `docs/RELEASE.md` for required Apple and GitHub secrets.
 - Chat replies remain visible in the scrollable panel for the current conversation. User questions and AI replies are retained as bounded conversation context; Clear conversation history removes them.
 - Faster-Whisper is an optional local STT fallback. On first use, Laka AI provisions it into its app-data directory and downloads the chosen model; `src/faster_whisper_runner.py` hosts one persistent local worker for later requests.
-- Fast answers skip a new screenshot for typed follow-ups, cap transcript and resume context to 6,000 characters each, and cap fast-mode output at 700 tokens. Settings shows first-token latency after a request.
+- Fast answers skip a new screenshot for typed follow-ups, cap transcript at 4,000 characters and resume context at 3,500 characters, and cap fast-mode output at 450 tokens. Settings shows first-token latency after a request.
 - Voice capture now downsamples the actual AudioWorklet rate to 16 kHz before WAV/STT conversion, and renderer transcript events render as scrollable `You` / `Other speaker` bubbles. The original Cue repository was compared: it uses the same browser capture pattern but did not render transcript events.
 
 ## Verification
@@ -87,3 +87,26 @@
 
 ### Pending Work
 - Live provider and device testing still requires the user's own configured key and a real microphone/BlackHole or Loopback source; no API key is stored or printed by development tooling.
+
+## Session Update - 2026-07-27 (v2.0 performance and speech accuracy)
+
+### Objective
+- Improve response speed across chat, Assist, and voice; improve speech recognition accuracy; produce a downloadable macOS v2.0 build.
+
+### Completed
+- Reduced Fast/Smart output budgets to 450/900 tokens and reduced transcript/resume prompt caps to 4,000/3,500 characters to lower provider latency without removing grounded role/resume context.
+- Added a speech-language selector. Choosing English avoids auto-detection delay; Hindi and other common languages are passed to Groq Whisper, OpenAI Whisper, Gemini, and local Faster-Whisper.
+- Versioned the application as `2.0.0` for the requested v2.0 package.
+
+### Files Modified
+- `package.json`, `package-lock.json`, `HANDOFF.md`
+- `src/llm.js`, `src/prompts.js`, `src/stt.js`, `src/local-stt.js`, `src/faster_whisper_runner.py`, `src/store.js`, `src/validators.js`
+- `renderer/index.html`, `renderer/renderer.js`, and corresponding tests
+
+### Verification
+- `npm test` passed: 25 tests.
+- `npm audit --omit=dev --audit-level=high` found 0 production vulnerabilities.
+- `npm run pack` completed and `dist/Laka AI v2.0.zip` was created from `dist/mac-arm64/Laka AI.app`.
+
+### Notes For Next Agent
+- The source app was restarted after this change. The downloadable archive is unsigned until Apple signing credentials are configured.

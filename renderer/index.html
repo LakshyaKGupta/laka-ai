@@ -66,6 +66,7 @@
           <button data-provider="openai">OpenAI</button>
           <button data-provider="anthropic">Anthropic</button>
           <button data-provider="gemini">Gemini</button>
+          <button data-provider="groq">Groq</button>
           <button data-provider="nvidia">Nvidia</button>
         </div>
 
@@ -73,7 +74,8 @@
         <div class="s-field"><span>OpenAI</span><input id="key-openai" type="password" placeholder="sk-..." autocomplete="off" /></div>
         <div class="s-field"><span>Anthropic</span><input id="key-anthropic" type="password" placeholder="sk-ant-..." autocomplete="off" /></div>
         <div class="s-field"><span>Gemini</span><input id="key-gemini" type="password" placeholder="AIza..." autocomplete="off" /></div>
-        <div class="s-hint" style="margin:-4px 0 10px 0;">Paste your own Gemini key here if you want to avoid free-tier limits and get faster, more reliable replies.</div>
+        <div class="s-field"><span>Groq</span><input id="key-groq" type="password" placeholder="gsk_..." autocomplete="off" /></div>
+        <div class="s-hint" style="margin:-4px 0 10px 0;">Groq is the recommended free alternative: fast Llama answers and Whisper transcription. Its free tier also has rate limits.</div>
         <div class="s-field"><span>Nvidia</span><input id="key-nvidia" type="password" placeholder="nvapi-..." autocomplete="off" /></div>
 
         <label class="s-label">Models <span class="s-hint">fast = Smart off · smart = Smart on</span></label>
@@ -81,13 +83,18 @@
         <div class="s-field"><span>Smart</span><input id="model-smart" type="text" autocomplete="off" /></div>
 
         <label class="s-label">Cost control</label>
-        <label class="s-check"><input id="free-tier-only" type="checkbox" /> Free-tier only (Gemini free models)</label>
+        <label class="s-check"><input id="free-tier-only" type="checkbox" /> Free-tier only (Gemini or Groq free models)</label>
         <div class="s-usage" id="usage-status"></div>
 
         <label class="s-label">Local voice fallback</label>
         <label class="s-check"><input id="local-speech-enabled" type="checkbox" /> Use Faster-Whisper when cloud transcription fails</label>
-        <div class="s-field"><span>Model</span><select id="local-speech-model"><option value="tiny.en">Tiny (fastest)</option><option value="base.en">Base (recommended)</option><option value="small.en">Small (more accurate)</option><option value="medium.en">Medium (slowest)</option></select></div>
-        <div class="s-hint">Laka AI installs this once in its own app-data folder; the model downloads on first use.</div>
+        <div class="s-field"><span>Model</span><select id="local-speech-model"><option value="tiny.en">Tiny English (fastest)</option><option value="base.en">Base English (recommended for English)</option><option value="small.en">Small English (more accurate)</option><option value="medium.en">Medium English (slowest)</option><option value="base">Base multilingual</option><option value="small">Small multilingual (more accurate)</option><option value="medium">Medium multilingual (slowest)</option></select></div>
+        <div class="s-hint">Choose a multilingual model for Hindi or mixed-language meetings. Laka AI installs it once in its app-data folder; the model downloads on first use.</div>
+
+        <label class="s-label">Meeting audio <span class="s-hint">remote participants</span></label>
+        <div class="s-field"><span>Audio input</span><select id="meeting-audio-device"><option value="">Choose BlackHole or Loopback</option></select></div>
+        <button id="refresh-audio-devices" class="s-secondary" type="button">Refresh audio devices</button>
+        <div class="s-hint">On macOS, install BlackHole or Loopback, then route Meet output to a Multi-Output Device with your headphones and that virtual input. Laka AI never captures without you pressing Listen.</div>
 
         <label class="s-label">Local profile <span class="s-hint">no cloud account required</span></label>
         <label class="s-check"><input id="remember-profile" type="checkbox" /> I agree to securely store this profile and resume on this Mac</label>

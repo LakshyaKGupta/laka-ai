@@ -4,7 +4,7 @@
 
 **A local AI assistant that can help with your screen, notes, and permitted conversations.**
 
-A free, self-hosted alternative to Cluely. Bring your own AI key (OpenAI · Anthropic · Google Gemini).
+A local desktop assistant. Bring your own AI key (Groq · Google Gemini · OpenAI · Anthropic).
 
 <img src="docs/tutorial.png" width="620" alt="Laka AI first-run tutorial" />
 
@@ -42,8 +42,8 @@ Run Laka AI from source:
 You need [Node.js](https://nodejs.org) 18+ installed. No Xcode required.
 
 ```bash
-git clone https://github.com/Blueturboguy07/cue.git
-cd cue
+git clone https://github.com/LakshyaKGupta/laka-ai.git
+cd laka-ai
 npm install
 npm start
 ```
@@ -78,12 +78,17 @@ Laka AI uses **your own** API key. Click the **`...`** button in the input box (
 | **OpenAI** | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) | One key does everything — **but** for the *listening* features the key must have **Whisper / audio** access (a "restricted" project key that only allows chat will give a 403 on transcription). |
 | **Anthropic (Claude)** | [console.anthropic.com](https://console.anthropic.com) | Great for screen & coding help. Claude has no speech-to-text, so add an OpenAI or Gemini key too if you want the listening features. |
 | **Google Gemini** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Recommended starting point: one key does chat + transcription, with a limited free tier. |
+| **Groq** | [console.groq.com/keys](https://console.groq.com/keys) | Recommended free alternative: fast Llama responses plus Whisper transcription. Free limits still apply. |
 
 Your API keys are encrypted with macOS Keychain and the settings file retains only encrypted ciphertext. They are sent only to the provider you choose. Laka AI has no server and collects nothing.
 
-### Optional local speech fallback
+### Speech-to-text and accuracy
 
-Laka AI can fall back to [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) when cloud transcription is unavailable. Enable it in **Settings → Local voice fallback**. On first use, Laka AI installs the Python package into its own app-data folder and downloads the selected model; later launches reuse that cached runtime and model. **Base** is the recommended speed/accuracy balance. This feature runs locally and does not send fallback audio to an AI provider.
+Laka AI uses Groq Whisper first when a Groq key is configured, then OpenAI/Gemini when available, then [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) locally. Enable the local fallback in **Settings → Local voice fallback**. On first use, Laka AI installs the Python package into its own app-data folder and downloads the selected model; later launches reuse that cached runtime and model. Choose **Small multilingual** for Hindi or mixed-language meetings; use Base English for the fastest English-only fallback.
+
+### Capture other people in a Meet call on macOS
+
+Electron cannot capture macOS system audio directly. To transcribe remote participants while keeping headphones on, install [BlackHole](https://existential.audio/blackhole/) or Rogue Amoeba Loopback, create a macOS **Multi-Output Device** containing both your headphones and the virtual device, route Meet output to that Multi-Output Device, then choose the BlackHole/Loopback input in **Settings → Meeting audio**. Laka AI captures only after you press Listen and only where every participant and the platform permit it. On Windows, Electron's system-audio loopback is used instead.
 
 ### Step 3 — Use with consent
 
@@ -111,18 +116,18 @@ Laka AI is an [Electron](https://www.electronjs.org/) app. Everything runs local
 **The three inputs are kept completely separate:**
 - **Screen** — captured with Electron's `desktopCapturer` (full-resolution screenshots, taken only when a feature needs one).
 - **Your mic ("You")** — `getUserMedia` → downsampled to 16 kHz audio → transcribed.
-- **Meeting audio ("Them")** — `getDisplayMedia` loopback capture of your system's output audio, kept on its own channel so Laka AI knows *who* said what.
+- **Meeting audio ("Them")** — on macOS, a user-selected BlackHole/Loopback virtual input; on Windows, Electron's system-output loopback. It is kept on its own channel so Laka AI knows *who* said what.
 
-Both audio streams are transcribed (OpenAI Whisper or Gemini) and fed, with an optional screenshot, to your AI model. Responses **stream** into the panel word-by-word.
+Both audio streams are transcribed (Groq Whisper, OpenAI Whisper, Gemini, or local Faster-Whisper) and fed, with an optional screenshot, to your AI model. Responses **stream** into the panel word-by-word.
 
 The app uses macOS content protection where available, but this is not a privacy or concealment guarantee. Treat every screen share and recording as if Laka AI could be visible.
 
 ```
 main process ──┬─ overlay window (frameless, transparent, always-on-top, content-protected)
                ├─ screenshot capture (desktopCapturer)
-               ├─ speech-to-text (Whisper / Gemini)      ── "You" + "Them" channels
-               └─ LLM streaming (OpenAI / Anthropic / Gemini)
-renderer ──────┴─ the glass UI + mic capture + system-audio loopback
+               ├─ speech-to-text (Groq / Whisper / Gemini / Faster-Whisper) ── "You" + "Them" channels
+               └─ LLM streaming (Groq / OpenAI / Anthropic / Gemini)
+renderer ──────┴─ the glass UI + mic capture + platform-safe meeting-audio input
 ```
 
 ---
@@ -136,7 +141,10 @@ You may have granted an older build. Replacing a locally built app can make macO
 Your API key is restricted. Most often it's an OpenAI **project key that only allows chat models** — it works for screen/coding help but 403s on transcription (Whisper). Fix: enable audio/Whisper on the key, use an unrestricted key, or add a Gemini key (Laka AI falls back to it for transcription).
 
 **Listening does nothing / no transcript.**
-Check Settings shows a transcription-capable key (OpenAI with Whisper, or Gemini). Also make sure Screen Recording is granted (meeting audio needs it).
+Check Settings shows a transcription-capable key (Groq Whisper, OpenAI Whisper, or Gemini). On macOS, choose BlackHole or Loopback in Settings → Meeting audio and ensure Meet output is routed to the Multi-Output Device; microphone permission alone cannot capture remote audio.
+
+**Gemini says quota exceeded / 429.**
+The Gemini free-tier request window is exhausted. Laka AI turns this into a clear retry message and uses Groq automatically when a Groq key is configured. Otherwise wait for the displayed retry time or use a paid provider.
 
 **Laka AI shows up in a screen share.**
 This is expected behavior on some capture paths. Do not rely on the app being excluded from any screen share or recording.

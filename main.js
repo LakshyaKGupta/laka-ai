@@ -4,7 +4,7 @@ const path = require('path');
 const store = require('./src/store');
 const { captureScreenshot } = require('./src/screen');
 const { createSTT } = require('./src/stt');
-const { createLLM } = require('./src/llm');
+const { createLLM, formatProviderError } = require('./src/llm');
 const { MODES } = require('./src/prompts');
 const { rms16 } = require('./src/wav');
 const { extractResumeText } = require('./src/resume');
@@ -250,7 +250,7 @@ async function runFeature(mode, userText) {
     if (DEBUG) console.log('[DEBUG MAIN] Full LLM Output:\n', fullText);
     send('llm:done', {});
   } catch (e) {
-    send('llm:error', { message: 'Error: ' + (e && e.message ? e.message : String(e)) });
+    send('llm:error', { message: formatProviderError(e) });
   } finally {
     state.busy = false;
   }

@@ -131,6 +131,7 @@ function getProviderCandidates(settings) {
 
   push(selectedProvider);
   if (selectedProvider !== 'gemini') push('gemini');
+  if (selectedProvider !== 'groq') push('groq');
   if (selectedProvider !== 'openai') push('openai');
   if (selectedProvider !== 'anthropic') push('anthropic');
   if (selectedProvider !== 'nvidia') push('nvidia');
@@ -142,19 +143,22 @@ function createLLM(settings) {
   const keys = settings.apiKeys || {};
   const tier = settings.smart ? 'smart' : 'fast';
   const maxTokens = getDefaultMaxTokens(settings);
-  const freeTierModels = new Set(['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview']);
+  const freeTierModels = {
+    gemini: new Set(['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview']),
+    groq: new Set(['llama-3.1-8b-instant', 'llama-3.3-70b-versatile'])
+  };
   const candidates = getProviderCandidates(settings);
   const primary = candidates.find((entry) => entry.provider === provider) || candidates[0] || null;
   const model = primary ? primary.model : null;
   const apiKey = primary ? primary.apiKey : null;
-  const freeTierBlocked = settings.freeTierOnly && (provider !== 'gemini' || !freeTierModels.has(model));
+  const freeTierBlocked = settings.freeTierOnly && !(freeTierModels[provider] && freeTierModels[provider].has(model));
 
   if (DEBUG) console.log('[DEBUG LLM] createLLM initialized:', { provider, model, candidateCount: candidates.length, ready: Boolean(primary) && !freeTierBlocked });
 
   return {
     provider, model, apiKey,
     ready: Boolean(primary) && !freeTierBlocked,
-    error: freeTierBlocked ? 'Free-tier only is enabled. Select Gemini with a supported free-tier model.' : (!primary ? 'Add a provider API key in Settings before asking Laka AI for help.' : ''),
+    error: freeTierBlocked ? 'Free-tier only is enabled. Select Gemini or Groq with a supported free-tier model.' : (!primary ? 'Add a provider API key in Settings before asking Laka AI for help.' : ''),
     async stream(params) {
       if (DEBUG) console.log('[DEBUG LLM] stream() invoked for provider:', provider);
       let lastError = null;
@@ -162,11 +166,13 @@ function createLLM(settings) {
         try {
           const args = { apiKey: candidate.apiKey, model: candidate.model, maxTokens, ...params };
           if (candidate.provider === 'openai') return await streamOpenAI(args);
+          if (candidate.provider === 'groq') return await streamOpenAI({ ...args, baseURL: 'https://api.groq.com/openai/v1' });
           if (candidate.provider === 'nvidia') return await streamOpenAI({ ...args, baseURL: 'https://integrate.api.nvidia.com/v1' });
           if (candidate.provider === 'anthropic') return await streamAnthropic(args);
           if (candidate.provider === 'gemini') return await streamGemini(args);
           throw new Error('unknown provider: ' + candidate.provider);
         } catch (error) {
+          if (error && typeof error === 'object') error.lakaProvider = candidate.provider;
           lastError = error;
         }
       }
@@ -175,4 +181,15 @@ function createLLM(settings) {
   };
 }
 
-module.exports = { createLLM, getDefaultMaxTokens, isRetryableProviderError, getProviderCandidates };
+function formatProviderError(error) {
+  const message = String((error && error.message) || error || 'Unable to reach the AI provider.');
+  const retry = /retry in\s+([\d.]+)s/i.exec(message);
+  if ((error && (error.status === 429 || error.code === 429)) || /quota|rate limit|resource_exhausted/i.test(message)) {
+    const provider = error && error.lakaProvider ? error.lakaProvider : 'gemini';
+    const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
+    return `${providerName} free-tier limit reached${retry ? `. Retry in ${Math.ceil(Number(retry[1]))} seconds` : ''}. Add a Groq key in Settings for automatic fallback, or wait for the quota window.`;
+  }
+  return message.slice(0, 600);
+}
+
+module.exports = { createLLM, formatProviderError, getDefaultMaxTokens, isRetryableProviderError, getProviderCandidates };

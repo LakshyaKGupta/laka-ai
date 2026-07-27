@@ -3,7 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const ALLOWED_MODELS = new Set(['tiny.en', 'base.en', 'small.en', 'medium.en']);
+const ALLOWED_MODELS = new Set(['tiny.en', 'base.en', 'small.en', 'medium.en', 'tiny', 'base', 'small', 'medium']);
 
 function normalizeModel(model) {
   return ALLOWED_MODELS.has(model) ? model : 'base.en';

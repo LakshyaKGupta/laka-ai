@@ -27,3 +27,41 @@
 1. For a distributable build, configure a Developer ID Application certificate (`CSC_LINK`/`CSC_KEY_PASSWORD`) and Apple notarization secrets (`APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`). The build script is ready but deliberately skips without these credentials.
 2. Add integration tests for actual provider streaming using test keys stored in the CI secret store.
 3. Bundle a managed Python runtime and Faster-Whisper model if local fallback must work on user machines without the one-time Python installation.
+
+## Session Update - 2026-07-27
+
+### Objective
+- Make permitted Meet audio usable with headphones, provide a better free alternative to Gemini, and improve transcription accuracy.
+
+### Completed
+- Added Groq as a Keychain-backed LLM and STT provider. Groq Llama is an automatic fallback after a Gemini quota failure; Groq Whisper is the first cloud transcription option when configured.
+- Replaced the misleading macOS system-loopback attempt with a user-selected virtual audio input. The UI explains how to route Meet output to a BlackHole/Loopback + headphones Multi-Output Device.
+- Added multilingual Faster-Whisper model choices for mixed-language speech and a concise Gemini 429 recovery message.
+- Updated the README with the correct Laka AI repository, Groq setup, and macOS meeting-audio routing steps.
+
+### Files Modified
+- `main.js`, `renderer/index.html`, `renderer/renderer.js`
+- `src/llm.js`, `src/stt.js`, `src/local-stt.js`, `src/store.js`, `src/validators.js`
+- `README.md` and provider/STT/security tests
+
+### Architecture Decisions
+- macOS remote audio uses an explicit virtual input; Electron's built-in loopback is retained only for non-macOS platforms because macOS does not support Electron loopback capture.
+- Free-tier-only mode permits the documented Gemini and Groq defaults. Provider keys remain protected via Electron safeStorage where macOS Keychain is available.
+
+### Dependencies Added
+- None. Groq uses the existing OpenAI-compatible SDK.
+
+### Verification
+- `npm test` passed: 22 tests.
+- `npm audit --omit=dev --audit-level=high` passed: 0 production vulnerabilities.
+- `npm run pack` completed with ASAR enabled; signing/notarization correctly skipped because Apple release credentials are not configured locally.
+
+### Issues Found
+- A virtual device still must be installed and selected by the user on macOS; an app cannot safely or reliably reroute system audio/headphones itself.
+
+### Pending Work
+- Test actual device routing and provider calls with a user-owned Groq key and a BlackHole/Loopback device installed.
+- Bundle a managed Python runtime if Faster-Whisper must work on machines without Python 3.
+
+### Notes For Next Agent
+- Do not present macOS system-loopback as supported. Follow `README.md` for the required Multi-Output Device route.

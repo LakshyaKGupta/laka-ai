@@ -1,4 +1,4 @@
-const PROVIDERS = new Set(['openai', 'anthropic', 'gemini', 'nvidia']);
+const PROVIDERS = new Set(['openai', 'anthropic', 'gemini', 'groq', 'nvidia']);
 const MODES = new Set(['assist', 'say', 'followup', 'recap', 'ask', 'leetcode']);
 const MAX_TEXT_LENGTH = 12_000;
 const MAX_PCM_BYTES = 1_048_576;
@@ -36,7 +36,8 @@ function sanitizeSettingsPatch(patch) {
   if (typeof patch.freeTierOnly === 'boolean') result.freeTierOnly = patch.freeTierOnly;
   if (typeof patch.onboarded === 'boolean') result.onboarded = patch.onboarded;
   if (typeof patch.localSpeechEnabled === 'boolean') result.localSpeechEnabled = patch.localSpeechEnabled;
-  if (['tiny.en', 'base.en', 'small.en', 'medium.en'].includes(patch.localSpeechModel)) result.localSpeechModel = patch.localSpeechModel;
+  if (['tiny.en', 'base.en', 'small.en', 'medium.en', 'tiny', 'base', 'small', 'medium'].includes(patch.localSpeechModel)) result.localSpeechModel = patch.localSpeechModel;
+  if (typeof patch.meetingAudioDeviceId === 'string') result.meetingAudioDeviceId = boundedText(patch.meetingAudioDeviceId, 512);
   if (patch.models && typeof patch.models === 'object') {
     result.models = {};
     for (const provider of PROVIDERS) {

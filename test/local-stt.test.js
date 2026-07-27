@@ -5,6 +5,7 @@ const { normalizeModel, pipInstallArgs, runnerPath, runtimeEnv } = require('../s
 
 test('uses an approved Faster-Whisper model and rejects arbitrary command arguments', () => {
   assert.equal(normalizeModel('small.en'), 'small.en');
+  assert.equal(normalizeModel('small'), 'small');
   assert.equal(normalizeModel('--help'), 'base.en');
 });
 

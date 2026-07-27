@@ -22,7 +22,7 @@
   let settings = null;
   let busy = false;
   let aiEl = null;       // current streaming <div class="ai-text">
-  let apiKeyInputs = { openai: '', anthropic: '', gemini: '', nvidia: '' };
+  let apiKeyInputs = { openai: '', anthropic: '', gemini: '', groq: '', nvidia: '' };
   let caretEl = null;
   let usage = { requests: 0, freeTierOnly: true };
   let resumeName = '';
@@ -219,6 +219,25 @@
   async function startSystemAudio() {
     if (sysStream) return;
     try {
+      if (cue.platform === 'darwin') {
+        const deviceId = settings.meetingAudioDeviceId;
+        if (!deviceId) {
+          showStatus('To transcribe other speakers on macOS, choose your BlackHole or Loopback input in Settings, then start listening again.');
+          return;
+        }
+        sysStream = await navigator.mediaDevices.getUserMedia({
+          audio: { deviceId: { exact: deviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        });
+        sysCtx = new AudioContext({ sampleRate: 16000 });
+        await sysCtx.audioWorklet.addModule('./pcm-processor.js');
+        sysNode = sysCtx.createMediaStreamSource(sysStream);
+        sysProc = new AudioWorkletNode(sysCtx, 'pcm-processor');
+        sysProc.port.onmessage = (e) => cue.systemPcm(e.data);
+        const sink = sysCtx.createGain(); sink.gain.value = 0;
+        sysNode.connect(sysProc); sysProc.connect(sink); sink.connect(sysCtx.destination);
+        showStatus('Meeting audio input is active. Make sure Meet output is routed to your virtual device and headphones.');
+        return;
+      }
       let stream = null;
       try {
         stream = await navigator.mediaDevices.getDisplayMedia({ audio: true });
@@ -239,6 +258,7 @@
       showStatus('Speaker audio capture is active where the OS allows it.');
       cue.log('system audio: capturing loopback');
     } catch (err) {
+      if (cue.platform === 'darwin') showStatus('Meeting audio input could not start. Re-select BlackHole or Loopback in Settings, then try again.');
       cue.log('system audio error: ' + (err && err.message));
     }
   }
@@ -303,7 +323,7 @@
 
   // ---- settings ----------------------------------------------------------
   const scrim = $('#settings-scrim');
-  function openSettings() { fillSettings(); scrim.classList.remove('hidden'); }
+  function openSettings() { fillSettings(); scrim.classList.remove('hidden'); refreshMeetingAudioDevices(); }
   async function closeSettings() { await saveSettings(); scrim.classList.add('hidden'); }
   $('#more-btn').addEventListener('click', openSettings);
   $('#s-close').addEventListener('click', closeSettings);
@@ -323,12 +343,13 @@
       field.dataset.defaultPlaceholder = field.dataset.defaultPlaceholder || field.placeholder;
       field.placeholder = settings.apiKeyConfigured[provider] ? 'Configured — enter a new key to replace' : field.dataset.defaultPlaceholder;
     };
-    ['openai', 'anthropic', 'gemini', 'nvidia'].forEach(setKeyInput);
+    ['openai', 'anthropic', 'gemini', 'groq', 'nvidia'].forEach(setKeyInput);
     const m = settings.models[settings.provider] || { fast: '', smart: '' };
     $('#model-fast').value = m.fast; $('#model-smart').value = m.smart;
     $('#free-tier-only').checked = !!settings.freeTierOnly;
     $('#local-speech-enabled').checked = settings.localSpeechEnabled !== false;
     $('#local-speech-model').value = settings.localSpeechModel || 'base.en';
+    $('#meeting-audio-device').value = settings.meetingAudioDeviceId || '';
     $('#remember-profile').checked = !!profile.enabled;
     $('#display-name').value = $('#display-name').value || profile.displayName || '';
     $('#company').value = $('#company').value || profile.company || '';
@@ -340,8 +361,8 @@
   }
   function statusText() {
     const k = settings.apiKeyConfigured;
-    const has = [k.openai && 'OpenAI', k.anthropic && 'Anthropic', k.gemini && 'Gemini', k.nvidia && 'Nvidia'].filter(Boolean);
-    const stt = k.openai ? 'Whisper' : (k.gemini ? 'Gemini' : 'none');
+    const has = [k.openai && 'OpenAI', k.anthropic && 'Anthropic', k.gemini && 'Gemini', k.groq && 'Groq', k.nvidia && 'Nvidia'].filter(Boolean);
+    const stt = k.groq ? 'Groq Whisper' : (k.openai ? 'Whisper' : (k.gemini ? 'Gemini' : 'Faster-Whisper'));
     return 'Active: ' + settings.provider + ' · keys: ' + (has.join(', ') || 'none set') + ' · transcription: ' + stt;
   }
   function updateUsage() {
@@ -358,7 +379,7 @@
   }));
   async function saveSettings() {
     const apiKeys = {};
-    ['openai', 'anthropic', 'gemini', 'nvidia'].forEach((provider) => {
+    ['openai', 'anthropic', 'gemini', 'groq', 'nvidia'].forEach((provider) => {
       const field = $('#key-' + provider);
       const value = field.value.trim();
       apiKeyInputs[provider] = value;
@@ -367,12 +388,36 @@
     if (!settings.models[settings.provider]) settings.models[settings.provider] = {};
     settings.models[settings.provider].fast = $('#model-fast').value.trim();
     settings.models[settings.provider].smart = $('#model-smart').value.trim();
-    settings = await cue.settingsSet({ provider: settings.provider, models: settings.models, apiKeys, freeTierOnly: $('#free-tier-only').checked, localSpeechEnabled: $('#local-speech-enabled').checked, localSpeechModel: $('#local-speech-model').value });
+    settings = await cue.settingsSet({ provider: settings.provider, models: settings.models, apiKeys, freeTierOnly: $('#free-tier-only').checked, localSpeechEnabled: $('#local-speech-enabled').checked, localSpeechModel: $('#local-speech-model').value, meetingAudioDeviceId: $('#meeting-audio-device').value });
     const contextPatch = { company: $('#company').value, role: $('#role').value, responsibilities: $('#responsibilities').value };
     await cue.contextSet(contextPatch);
     profile = await cue.profileSet({ displayName: $('#display-name').value, ...contextPatch }, $('#remember-profile').checked);
     if (profile && profile.error) showStatus(profile.error);
   }
+  async function refreshMeetingAudioDevices() {
+    const select = $('#meeting-audio-device');
+    const selected = settings.meetingAudioDeviceId || select.value;
+    try {
+      const inputs = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === 'audioinput');
+      select.replaceChildren();
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = inputs.length ? 'Choose BlackHole or Loopback' : 'Grant microphone permission, then refresh';
+      select.appendChild(placeholder);
+      inputs.forEach((device) => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.textContent = device.label || 'Audio input';
+        select.appendChild(option);
+      });
+      const virtual = inputs.find((device) => /blackhole|loopback|soundflower/i.test(device.label));
+      select.value = inputs.some((device) => device.deviceId === selected) ? selected : (virtual ? virtual.deviceId : '');
+      if (!inputs.length) showStatus('Grant microphone permission, then refresh audio devices to choose BlackHole or Loopback.');
+    } catch (error) {
+      showStatus('Unable to list audio devices. Grant microphone permission, then refresh.');
+    }
+  }
+  $('#refresh-audio-devices').addEventListener('click', refreshMeetingAudioDevices);
   $('#resume-upload').addEventListener('click', async () => {
     const result = await cue.resumeImport();
     if (result && result.resumeName) {

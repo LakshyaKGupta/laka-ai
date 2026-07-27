@@ -14,6 +14,15 @@ async function transcribeOpenAI(apiKey, wav, model) {
   return (res.text || '').trim();
 }
 
+async function transcribeGroq(apiKey, wav) {
+  const OpenAI = require('openai');
+  const toFile = OpenAI.toFile || require('openai/uploads').toFile;
+  const client = new OpenAI({ apiKey, baseURL: 'https://api.groq.com/openai/v1' });
+  const file = await toFile(wav, 'audio.wav', { type: 'audio/wav' });
+  const res = await client.audio.transcriptions.create({ file, model: 'whisper-large-v3-turbo', temperature: 0 });
+  return (res.text || '').trim();
+}
+
 async function transcribeGemini(apiKey, wav) {
   const { GoogleGenAI } = require('@google/genai');
   const ai = new GoogleGenAI({ apiKey });
@@ -29,12 +38,13 @@ async function transcribeGemini(apiKey, wav) {
 
 function getSpeechMode(settings) {
   const keys = settings && settings.apiKeys ? settings.apiKeys : {};
-  return keys.openai || keys.gemini ? 'cloud-with-local-fallback' : 'local';
+  return keys.groq || keys.openai || keys.gemini ? 'cloud-with-local-fallback' : 'local';
 }
 
 function createSTT(settings) {
   const keys = settings.apiKeys || {};
   const chain = [];
+  if (keys.groq) chain.push({ p: 'groq', fn: (wav) => transcribeGroq(keys.groq, wav) });
   if (keys.openai) chain.push({ p: 'openai', fn: (wav) => transcribeOpenAI(keys.openai, wav, settings.sttModel) });
   if (keys.gemini) chain.push({ p: 'gemini', fn: (wav) => transcribeGemini(keys.gemini, wav) });
   if (settings.localSpeechEnabled !== false) chain.push({ p: 'faster-whisper', fn: (wav) => transcribeLocal(wav, settings) });
@@ -63,4 +73,4 @@ function createSTT(settings) {
   };
 }
 
-module.exports = { createSTT, getSpeechMode };
+module.exports = { createSTT, getSpeechMode, transcribeGroq };

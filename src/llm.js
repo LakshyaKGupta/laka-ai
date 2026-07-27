@@ -85,7 +85,9 @@ async function streamGemini({ apiKey, model, system, turns, imageDataUrl, maxTok
   if (DEBUG) console.log('[DEBUG LLM] streamGemini sending request to Google SDK with contents count:', contents.length);
   try {
     const stream = await ai.models.generateContentStream({
-      model, contents, config: { systemInstruction: system }
+      model,
+      contents,
+      config: { systemInstruction: system, maxOutputTokens: maxTokens }
     });
     let full = '';
     let lastFinishReason = 'UNKNOWN';
@@ -104,33 +106,73 @@ async function streamGemini({ apiKey, model, system, turns, imageDataUrl, maxTok
   }
 }
 
+function getDefaultMaxTokens(settings) {
+  if (typeof settings?.maxTokens === 'number' && settings.maxTokens > 0) return settings.maxTokens;
+  return settings?.smart ? 4000 : 2400;
+}
+
+function isRetryableProviderError(error) {
+  const status = error && (error.status || error.code || error.statusCode);
+  if (status === 429 || status === 503 || status === 408 || status === 500 || status === 502) return true;
+  const message = (error && (error.message || '')) + '';
+  return /quota|rate limit|exceeded|overload|temporarily|unavailable|retry/i.test(message);
+}
+
+function getProviderCandidates(settings) {
+  const keys = settings.apiKeys || {};
+  const tier = settings.smart ? 'smart' : 'fast';
+  const selectedProvider = settings.provider || 'gemini';
+  const candidates = [];
+  const push = (provider) => {
+    const model = (settings.models[provider] || {})[tier];
+    if (!model || !keys[provider]) return;
+    candidates.push({ provider, model, apiKey: keys[provider] });
+  };
+
+  push(selectedProvider);
+  if (selectedProvider !== 'gemini') push('gemini');
+  if (selectedProvider !== 'openai') push('openai');
+  if (selectedProvider !== 'anthropic') push('anthropic');
+  if (selectedProvider !== 'nvidia') push('nvidia');
+  return candidates;
+}
+
 function createLLM(settings) {
   const provider = settings.provider;
   const keys = settings.apiKeys || {};
-  const apiKey = keys[provider];
   const tier = settings.smart ? 'smart' : 'fast';
-  const model = (settings.models[provider] || {})[tier];
-  
-  const maxTokens = settings.smart ? 1600 : 800;
-  const freeTierModels = new Set(['gemini-3.1-flash-lite', 'gemini-3-flash-preview']);
+  const maxTokens = getDefaultMaxTokens(settings);
+  const freeTierModels = new Set(['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview']);
+  const candidates = getProviderCandidates(settings);
+  const primary = candidates.find((entry) => entry.provider === provider) || candidates[0] || null;
+  const model = primary ? primary.model : null;
+  const apiKey = primary ? primary.apiKey : null;
   const freeTierBlocked = settings.freeTierOnly && (provider !== 'gemini' || !freeTierModels.has(model));
 
-  if (DEBUG) console.log('[DEBUG LLM] createLLM initialized:', { provider, model, isKeyPresent: !!apiKey, ready: !!apiKey && !!model });
+  if (DEBUG) console.log('[DEBUG LLM] createLLM initialized:', { provider, model, candidateCount: candidates.length, ready: Boolean(primary) && !freeTierBlocked });
 
   return {
     provider, model, apiKey,
-    ready: !!apiKey && !!model && !freeTierBlocked,
-    error: freeTierBlocked ? 'Free-tier only is enabled. Select Gemini with a supported free-tier model.' : '',
+    ready: Boolean(primary) && !freeTierBlocked,
+    error: freeTierBlocked ? 'Free-tier only is enabled. Select Gemini with a supported free-tier model.' : (!primary ? 'Add a provider API key in Settings before asking Laka AI for help.' : ''),
     async stream(params) {
       if (DEBUG) console.log('[DEBUG LLM] stream() invoked for provider:', provider);
-      const args = { apiKey, model, maxTokens, ...params };
-      if (provider === 'openai') return streamOpenAI(args);
-      if (provider === 'nvidia') return streamOpenAI({ ...args, baseURL: 'https://integrate.api.nvidia.com/v1' });
-      if (provider === 'anthropic') return streamAnthropic(args);
-      if (provider === 'gemini') return streamGemini(args);
-      throw new Error('unknown provider: ' + provider);
+      let lastError = null;
+      for (const candidate of candidates) {
+        try {
+          const args = { apiKey: candidate.apiKey, model: candidate.model, maxTokens, ...params };
+          if (candidate.provider === 'openai') return await streamOpenAI(args);
+          if (candidate.provider === 'nvidia') return await streamOpenAI({ ...args, baseURL: 'https://integrate.api.nvidia.com/v1' });
+          if (candidate.provider === 'anthropic') return await streamAnthropic(args);
+          if (candidate.provider === 'gemini') return await streamGemini(args);
+          throw new Error('unknown provider: ' + candidate.provider);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error('unknown provider: ' + provider);
     }
   };
 }
 
-module.exports = { createLLM };
+module.exports = { createLLM, getDefaultMaxTokens, isRetryableProviderError, getProviderCandidates };

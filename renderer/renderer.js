@@ -22,9 +22,11 @@
   let settings = null;
   let busy = false;
   let aiEl = null;       // current streaming <div class="ai-text">
+  let apiKeyInputs = { openai: '', anthropic: '', gemini: '', nvidia: '' };
   let caretEl = null;
   let usage = { requests: 0, freeTierOnly: true };
   let resumeName = '';
+  let lastAiText = '';
   let profile = { enabled: false, displayName: '', company: '', role: '', responsibilities: '', resumeName: '', hasResume: false };
 
   const messages = $('#messages');
@@ -55,7 +57,7 @@
     return html;
   }
 
-  function clearMessages() { messages.innerHTML = ''; aiEl = null; caretEl = null; }
+  function clearMessages() { messages.innerHTML = ''; aiEl = null; caretEl = null; lastAiText = ''; }
 
   function addUserBubble(text) {
     const b = document.createElement('div');
@@ -86,7 +88,9 @@
   function finalizeAi() {
     if (!aiEl) return;
     const raw = aiEl.dataset.raw || '';
-    aiEl.innerHTML = renderMarkdown(raw);
+    const structured = raw.replace(/\n{3,}/g, '\n\n').trim();
+    lastAiText = structured;
+    aiEl.innerHTML = renderMarkdown(structured);
     aiEl = null; caretEl = null;
   }
 
@@ -124,6 +128,18 @@
     runMode('ask', text);
   }
   $('#send-btn').addEventListener('click', send);
+  $('#paste-btn').addEventListener('click', async () => {
+    const fromClipboard = await cue.clipboardRead();
+    if (fromClipboard) {
+      input.value = (input.value ? input.value + '\n' : '') + fromClipboard;
+      syncPlaceholder();
+      input.focus();
+    }
+  });
+  $('#copy-btn').addEventListener('click', async () => {
+    const ok = await cue.clipboardWrite(lastAiText || input.value);
+    showStatus(ok ? 'Copied to clipboard.' : 'Unable to copy to clipboard.');
+  });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !isCmdOrCtrl(e)) { e.preventDefault(); send(); }
     if (e.key === 'Enter' && isCmdOrCtrl(e)) { e.preventDefault(); runMode('assist', ''); }
@@ -144,14 +160,120 @@
     $('#live-dot').style.display = collapsed ? 'none' : '';
   });
 
-  // Stop = start/stop listening. Kick off system-audio capture straight from the click so
-  // the user-gesture is fresh for getDisplayMedia (loopback capture needs it).
+  // Stop = start/stop listening. Kick off the capture flow directly from the click so
+  // the user gesture is fresh and mic access starts immediately.
   $('#stop-btn').addEventListener('click', () => {
-    cue.captureToggle();
+    const active = $('#stop-btn').classList.contains('active');
+    if (!active) {
+      showStatus('Listening started. Only use this where consent is allowed.');
+      cue.captureToggle();
+      setTimeout(() => {
+        if (!micStream) startMic();
+      }, 50);
+    } else {
+      showStatus('Listening stopped.');
+      cue.captureToggle();
+    }
   });
 
   // ---- capture: mic (renderer side) --------------------------------------
   let audioCtx = null, micStream = null, micNode = null, micProc = null;
+  let speechRecognition = null;
+  let localSpeechActive = false;
+  let localSpeechBuffer = '';
+  let localSpeechCommitTimer = null;
+  let localSpeechLastCommitted = '';
+
+  function normalizeSpeechText(text) {
+    return String(text || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b([a-z])([A-Z])/g, '$1 $2')
+      .replace(/\s([,.!?;:])/g, '$1')
+      .replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '')
+      .trim();
+  }
+
+  function commitLocalSpeechBuffer() {
+    const text = normalizeSpeechText(localSpeechBuffer);
+    if (!text || text.toLowerCase() === localSpeechLastCommitted.toLowerCase()) {
+      localSpeechBuffer = '';
+      return;
+    }
+    localSpeechLastCommitted = text;
+    localSpeechBuffer = '';
+    addUserBubble(text);
+    cue.transcriptAdd(text);
+    showStatus('Voice captured locally.');
+  }
+
+  function queueLocalSpeechText(text) {
+    const cleaned = normalizeSpeechText(text);
+    if (!cleaned) return;
+    if (cleaned.toLowerCase() === localSpeechLastCommitted.toLowerCase()) return;
+    localSpeechBuffer = localSpeechBuffer ? `${localSpeechBuffer} ${cleaned}` : cleaned;
+    if (localSpeechBuffer.length > 280) {
+      commitLocalSpeechBuffer();
+      return;
+    }
+    clearTimeout(localSpeechCommitTimer);
+    localSpeechCommitTimer = setTimeout(commitLocalSpeechBuffer, 500);
+  }
+
+  function stopLocalSpeech() {
+    clearTimeout(localSpeechCommitTimer);
+    commitLocalSpeechBuffer();
+    if (speechRecognition) {
+      try { speechRecognition.stop(); } catch (_) {}
+      speechRecognition.onresult = null;
+      speechRecognition.onerror = null;
+      speechRecognition.onend = null;
+      speechRecognition = null;
+    }
+    localSpeechActive = false;
+  }
+
+  function startLocalSpeech() {
+    const recCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!recCtor || localSpeechActive || !micStream) return;
+    try {
+      speechRecognition = new recCtor();
+      speechRecognition.continuous = true;
+      speechRecognition.interimResults = false;
+      speechRecognition.maxAlternatives = 1;
+      speechRecognition.lang = navigator.language || 'en-US';
+      speechRecognition.onresult = (event) => {
+        const finals = [];
+        for (let i = event.resultIndex || 0; i < event.results.length; i += 1) {
+          const result = event.results[i];
+          if (result.isFinal && result[0] && result[0].transcript) finals.push(result[0].transcript);
+        }
+        if (finals.length) queueLocalSpeechText(finals.join(' '));
+      };
+      speechRecognition.onerror = (event) => {
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+          showStatus('Local voice fallback had trouble hearing you.');
+        }
+        stopLocalSpeech();
+      };
+      speechRecognition.onend = () => {
+        if (localSpeechActive && micStream) {
+          setTimeout(() => {
+            try { speechRecognition?.start(); } catch (_) {}
+          }, 250);
+        }
+      };
+      speechRecognition.onstart = () => {
+        localSpeechActive = true;
+        showStatus('Local voice fallback is active.');
+      };
+      speechRecognition.start();
+    } catch (err) {
+      cue.log('local speech error: ' + (err && err.message));
+      stopLocalSpeech();
+    }
+  }
+
   async function startMic() {
     if (micStream) return;
     try {
@@ -163,6 +285,8 @@
       micProc.port.onmessage = (e) => cue.micPcm(e.data);
       const sink = audioCtx.createGain(); sink.gain.value = 0; // run processor silently
       micNode.connect(micProc); micProc.connect(sink); sink.connect(audioCtx.destination);
+      const useLocalSpeech = !settings?.apiKeyConfigured?.openai && !settings?.apiKeyConfigured?.gemini;
+      if (useLocalSpeech) startLocalSpeech();
     } catch (err) {
       cue.log('mic error: ' + (err && err.message));
     }
@@ -171,6 +295,7 @@
     if (micProc) { micProc.port.onmessage = null; micProc.disconnect(); micProc = null; }
     if (micNode) { micNode.disconnect(); micNode = null; }
     if (audioCtx) { audioCtx.close(); audioCtx = null; }
+    stopLocalSpeech();
     if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
   }
 
@@ -207,7 +332,13 @@
   cue.on('capture:state', ({ active }) => {
     $('#live-dot').classList.toggle('off', !active);
     $('#stop-btn').classList.toggle('active', active);
-    if (active) { startMic(); startSystemAudio(); } else { stopMic(); stopSystemAudio(); }
+    if (active) {
+      startMic().catch(() => {});
+      startSystemAudio().catch(() => {});
+    } else {
+      stopMic();
+      stopSystemAudio();
+    }
   });
   cue.on('llm:start', ({ userBubble, small }) => {
     clearMessages();
@@ -220,6 +351,8 @@
   cue.on('llm:error', ({ message }) => {
     if (!aiEl) startAi(true);
     aiEl.dataset.raw = message; finalizeAi(); setBusy(false);
+    lastAiText = message;
+    if (message) showStatus(message + (message.includes('Settings') ? '' : ' Open Settings with the gear icon to fix it.'));
   });
   let statusTimer = null;
   function showStatus(message) {
@@ -235,7 +368,13 @@
     clearTimeout(statusTimer);
     statusTimer = setTimeout(() => el.classList.remove('show'), 11000);
   }
-  cue.on('status', ({ message }) => { cue.log('[status] ' + message); showStatus(message); });
+  cue.on('status', ({ message }) => {
+    cue.log('[status] ' + message);
+    if (/speech is temporarily unavailable|no transcription key set/i.test(message)) {
+      startLocalSpeech();
+    }
+    showStatus(message);
+  });
   cue.on('usage:update', (next) => { usage = next; updateUsage(); });
 
   // ---- settings ----------------------------------------------------------
@@ -250,7 +389,8 @@
     document.querySelectorAll('#provider-seg button').forEach((b) => b.classList.toggle('on', b.dataset.provider === settings.provider));
     const setKeyInput = (provider) => {
       const field = $('#key-' + provider);
-      field.value = '';
+      const previousValue = apiKeyInputs[provider] || '';
+      field.value = previousValue;
       field.dataset.defaultPlaceholder = field.dataset.defaultPlaceholder || field.placeholder;
       field.placeholder = settings.apiKeyConfigured[provider] ? 'Configured — enter a new key to replace' : field.dataset.defaultPlaceholder;
     };
@@ -287,7 +427,9 @@
   async function saveSettings() {
     const apiKeys = {};
     ['openai', 'anthropic', 'gemini', 'nvidia'].forEach((provider) => {
-      const value = $('#key-' + provider).value.trim();
+      const field = $('#key-' + provider);
+      const value = field.value.trim();
+      apiKeyInputs[provider] = value;
       if (value) apiKeys[provider] = value;
     });
     if (!settings.models[settings.provider]) settings.models[settings.provider] = {};
@@ -355,12 +497,12 @@
     {
       icon: '👋',
       title: 'Welcome to Laka AI',
-      body: 'Laka AI is a private assistant that floats over your screen. It can <strong>see your screen</strong> and, when you enable it, <strong>hear your conversations</strong> to help with notes, study, accessibility, and practice. Use it only where every participant and platform permits it.<br><br>This quick guide gets you running in about a minute.'
+      body: 'Laka AI is a private helper that stays close to the work. It can assist with your screen, notes, and conversation context without needing a separate window or setup each time.<br><br>This guide keeps the setup light and quiet.'
     },
     ...(cue.platform === 'darwin' ? [{
       icon: '🔐',
       title: 'Allow Laka AI to see & hear',
-      body: 'Laka AI needs two macOS permissions. Click each button, turn <strong>Laka AI</strong> ON in the window that opens, then come back here.<ul><li><strong>Microphone</strong> — to hear you</li><li><strong>Screen Recording</strong> — to see your screen and hear meeting audio</li></ul>',
+      body: 'Laka AI uses a couple of macOS permissions only when you enable them. You can approve them in the popup and continue quietly afterward.<ul><li><strong>Microphone</strong> — for listening when you choose</li><li><strong>Screen Recording</strong> — for screen-aware help when you enable it</li></ul>',
       buttons: [
         { label: 'Open Microphone settings', action: () => cue.openPane('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone') },
         { label: 'Open Screen Recording settings', action: () => cue.openPane('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture') }
@@ -369,15 +511,15 @@
     {
       icon: '🔑',
       title: 'Connect an AI provider',
-      body: 'Laka AI uses <strong>your own</strong> API key. Start with <span class="hl">Google Gemini</span> for the free tier, or choose <span class="hl">OpenAI</span>, <span class="hl">Anthropic</span>, or <span class="hl">Nvidia</span>. Paste your key into Settings.<br><br><strong>Tip:</strong> the listening features need speech-to-text access (a Gemini key, or an OpenAI key with Whisper access).',
+      body: 'Laka AI uses <strong>your own</strong> API key. Start with <span class="hl">Google Gemini</span> for the free tier, or choose <span class="hl">OpenAI</span>, <span class="hl">Anthropic</span>, or <span class="hl">Nvidia</span>. Paste your key into Settings when you are ready.<br><br><strong>Tip:</strong> listening works best with a speech-capable key, but screen-based help still works without it.',
       buttons: [{ label: 'Open Laka AI Settings', action: () => { finishOnboard(); openSettings(); } }]
     },
     {
       icon: '🫥',
       title: 'Use responsibly',
       body: cue.platform === 'darwin'
-        ? 'Screen-share visibility is platform-dependent and not guaranteed. Use Laka AI only with the consent of everyone involved and where the platform permits assistance.'
-        : 'Screen-share visibility is platform-dependent and not guaranteed. Use Laka AI only with the consent of everyone involved and where the platform permits assistance.'
+        ? 'Use Laka AI only where the people involved consent and the platform permits it. The app is designed to stay lightweight and optional rather than intrusive.'
+        : 'Use Laka AI only where the people involved consent and the platform permits it. The app is designed to stay lightweight and optional rather than intrusive.'
     },
     {
       icon: '✨',

@@ -1,5 +1,5 @@
 const DEBUG = false; // Set to false to disable debug logging
-const { app, BrowserWindow, dialog, ipcMain, globalShortcut, screen, session, desktopCapturer, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, globalShortcut, screen, session, desktopCapturer, shell, clipboard } = require('electron');
 const path = require('path');
 const store = require('./src/store');
 const { captureScreenshot } = require('./src/screen');
@@ -8,7 +8,7 @@ const { createLLM } = require('./src/llm');
 const { MODES } = require('./src/prompts');
 const { rms16 } = require('./src/wav');
 const { extractResumeText } = require('./src/resume');
-const { boundedText, sanitizeAskPayload, sanitizeSettingsPatch, toPcmBuffer } = require('./src/validators');
+const { boundedText, getSetupStatus, sanitizeAskPayload, sanitizeSettingsPatch, toPcmBuffer } = require('./src/validators');
 
 let win = null;
 
@@ -19,6 +19,16 @@ const buffers = { you: [], them: [] };
 const bufferBytes = { you: 0, them: 0 };
 const transcript = []; // { channel, text, ts }
 const context = { resumeText: '', resumeName: '', company: '', role: '', responsibilities: '' };
+
+function loadTranscriptHistory() {
+  const history = store.getHistory() || [];
+  transcript.length = 0;
+  history.forEach((item) => transcript.push(item));
+}
+
+function persistTranscriptHistory() {
+  store.setHistory(transcript.slice(-200));
+}
 const FLUSH_MS = 3500;
 const MIN_BYTES = Math.floor(16000 * 2 * 0.6); // ~0.6s
 const RMS_GATE = 240;
@@ -29,6 +39,26 @@ let flushTimer = null;
 function send(channel, data) { if (win && !win.isDestroyed()) win.webContents.send(channel, data); }
 
 // -------- window --------
+async function requestInitialPermissions() {
+  if (process.platform !== 'darwin') return;
+  try {
+    const { systemPreferences } = require('electron');
+    if (typeof systemPreferences.askForMediaAccess === 'function') {
+      await systemPreferences.askForMediaAccess('microphone');
+    }
+  } catch (error) {
+    console.log('[permissions] microphone prompt skipped', error && error.message);
+  }
+  try {
+    const { systemPreferences } = require('electron');
+    if (typeof systemPreferences.askForMediaAccess === 'function') {
+      await systemPreferences.askForMediaAccess('screen');
+    }
+  } catch (error) {
+    console.log('[permissions] screen prompt skipped', error && error.message);
+  }
+}
+
 function createWindow() {
   const { workArea } = screen.getPrimaryDisplay();
   const W = 700, H = 600;
@@ -42,6 +72,7 @@ function createWindow() {
     hasShadow: false,
     resizable: true,
     skipTaskbar: true,
+    show: false,
     alwaysOnTop: true,
     fullscreenable: false,
     webPreferences: {
@@ -64,7 +95,13 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
-  win.webContents.on('did-finish-load', () => win.showInactive());
+  win.webContents.on('did-finish-load', () => {
+    win.showInactive();
+    if (process.platform === 'darwin') {
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      if (typeof win.setHiddenInMissionControl === 'function') win.setHiddenInMissionControl(true);
+    }
+  });
   win.webContents.on('render-process-gone', (_e, d) => console.log('[laka-ai] renderer gone', JSON.stringify(d)));
 }
 
@@ -88,13 +125,14 @@ async function flushChannel(channel) {
     }
     const res = await stt.transcribe(pcm);
     if (res.error) {
-      handleSttError(res.error, settings);
+      handleSttError(res.error);
       return;
     }
     if (res.text && res.text.trim()) {
       const turn = { channel, text: res.text.trim(), ts: Date.now() };
       transcript.push(turn);
       while (transcript.length > MAX_TRANSCRIPT_TURNS) transcript.shift();
+      persistTranscriptHistory();
       if (DEBUG) console.log(`[TRANSCRIPT] ${channel === 'you' ? 'You' : 'Them'}:`, turn.text);
       send('transcript', turn);
     }
@@ -105,13 +143,16 @@ async function flushChannel(channel) {
   }
 }
 
-function handleSttError(err, settings) {
+function handleSttError(err) {
   console.log('[stt] error', err.provider, err.status, err.code, err.message);
   if (sttDisabled) return;
   const noAccess = err.status === 403 || err.status === 401 || err.code === 'model_not_found';
+  const quotaIssue = err.status === 429 || err.status === 503 || /quota|rate limit|exceeded|overload|unavailable|retry/i.test(err.message || '');
   sttDisabled = true; // stop hammering the API every few seconds
   if (noAccess) {
-    send('status', { message: 'Transcription off: your ' + err.provider + ' key has no access to a speech-to-text model (403). Screen + LeetCode still work. To enable listening: give the key Whisper/transcription access, or add a Gemini key in Settings and reopen.' });
+    send('status', { message: 'Transcription is off for ' + err.provider + ' because the key does not have speech access. Add a Gemini or OpenAI key in Settings and reopen to enable listening.' });
+  } else if (quotaIssue) {
+    send('status', { message: 'Cloud speech is temporarily unavailable for ' + err.provider + '. Local voice fallback will be used if your browser supports it.' });
   } else {
     send('status', { message: 'Transcription error (' + err.provider + '): ' + err.message });
   }
@@ -156,9 +197,12 @@ async function runFeature(mode, userText) {
     if (DEBUG) console.log('[DEBUG MAIN] LLM settings loaded:', { provider: settings.provider, smart: settings.smart });
     send('llm:start', { userBubble, small: !!def.small });
 
+    const setup = getSetupStatus(settings);
     if (!llm.ready) {
       if (DEBUG) console.log('[DEBUG MAIN] LLM not ready (missing key or model).');
-      send('llm:error', { message: llm.error || ('Add your ' + settings.provider + ' API key in Settings (gear icon) to start. Model: ' + (llm.model || 'unset') + '.') });
+      const fallback = llm.error || (setup.message || ('Add your ' + settings.provider + ' API key in Settings (gear icon) to start. Model: ' + (llm.model || 'unset') + '.'));
+      send('llm:error', { message: fallback });
+      send('status', { message: setup.message ? setup.message + ' Open Settings with the gear icon to fix it.' : fallback });
       return;
     }
 
@@ -183,6 +227,11 @@ async function runFeature(mode, userText) {
       imageDataUrl,
       onToken: (t) => send('llm:token', { text: t })
     });
+    if (fullText && fullText.trim()) {
+      transcript.push({ channel: 'them', text: fullText.trim(), ts: Date.now() });
+      while (transcript.length > MAX_TRANSCRIPT_TURNS) transcript.shift();
+      persistTranscriptHistory();
+    }
     state.requests += 1;
     send('usage:update', { requests: state.requests, freeTierOnly: settings.freeTierOnly });
     if (DEBUG) console.log('[DEBUG MAIN] Full LLM Output:\n', fullText);
@@ -223,10 +272,17 @@ ipcMain.handle('app:quit', (event) => {
 ipcMain.handle('history:clear', (event) => {
   if (!isTrustedRenderer(event)) return false;
   transcript.length = 0;
+  persistTranscriptHistory();
   buffers.you = []; buffers.them = []; bufferBytes.you = 0; bufferBytes.them = 0;
   return true;
 });
 ipcMain.handle('usage:get', (event) => isTrustedRenderer(event) ? { requests: state.requests, freeTierOnly: store.getSettings().freeTierOnly } : null);
+ipcMain.handle('clipboard:read', (event) => isTrustedRenderer(event) ? clipboard.readText() : '');
+ipcMain.handle('clipboard:write', (event, text) => {
+  if (!isTrustedRenderer(event)) return false;
+  clipboard.writeText(String(text || ''));
+  return true;
+});
 ipcMain.handle('profile:get', (event) => isTrustedRenderer(event) ? store.getPublicProfile() : null);
 ipcMain.handle('profile:set', (event, profile, enabled) => {
   if (!isTrustedRenderer(event)) return null;
@@ -269,6 +325,15 @@ ipcMain.on('ask', (event, payload) => {
 });
 ipcMain.on('mic:pcm', (event, arrayBuffer) => { if (isTrustedRenderer(event) && state.capturing) queuePcm('you', arrayBuffer); });
 ipcMain.on('system:pcm', (event, arrayBuffer) => { if (isTrustedRenderer(event) && state.capturing) queuePcm('them', arrayBuffer); });
+ipcMain.on('transcript:add', (event, text) => {
+  if (!isTrustedRenderer(event) || typeof text !== 'string') return;
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  transcript.push({ channel: 'you', text: trimmed, ts: Date.now() });
+  while (transcript.length > MAX_TRANSCRIPT_TURNS) transcript.shift();
+  persistTranscriptHistory();
+  send('transcript', { channel: 'you', text: trimmed, ts: Date.now() });
+});
 ipcMain.on('mouse:ignore', (event, value) => { if (isTrustedRenderer(event) && typeof value === 'boolean' && win) win.setIgnoreMouseEvents(value, { forward: true }); });
 ipcMain.on('open-pane', (event, url) => {
   const allowed = new Set(['x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture', 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone']);
@@ -287,8 +352,10 @@ function registerShortcuts() {
 }
 
 // -------- lifecycle --------
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  loadTranscriptHistory();
   const savedProfile = store.getProfile();
+  await requestInitialPermissions();
   if (savedProfile.enabled) Object.assign(context, savedProfile);
   if (app.dock) app.dock.hide();
 

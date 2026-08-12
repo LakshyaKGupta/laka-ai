@@ -5,7 +5,7 @@ const { getWindowDiagnostic } = require('./src/window-diagnostics');
 const store = require('./src/store');
 const { captureScreenshot } = require('./src/screen');
 const { createSTT } = require('./src/stt');
-const { createLLM, formatProviderError, isTruncatedFinishReason } = require('./src/llm');
+const { createLLM, formatProviderError, getFeatureMaxTokens, isTruncatedFinishReason } = require('./src/llm');
 const { MODES } = require('./src/prompts');
 const { rms16 } = require('./src/wav');
 const { takeAudioChunk } = require('./src/audio-buffer');
@@ -174,6 +174,13 @@ function startFlushLoop() {
 }
 function stopFlushLoop() { if (flushTimer) { clearInterval(flushTimer); flushTimer = null; } }
 
+async function flushPendingAudio() {
+  const pending = ['you', 'them'].filter((channel) => bufferBytes[channel] >= MIN_BYTES && !state.transcribing[channel]);
+  if (!pending.length) return;
+  send('status', { message: 'Transcribing the latest audio…' });
+  await Promise.all(pending.map((channel) => flushChannel(channel)));
+}
+
 // -------- capture toggle --------
 // Mic + system audio are both captured in the RENDERER (getUserMedia for the mic,
 // getDisplayMedia loopback for system audio) so they run inside Laka AI's own process
@@ -222,6 +229,8 @@ async function runFeature(mode, userText) {
       return;
     }
 
+    if (mode === 'say') await flushPendingAudio();
+
     let imageDataUrl = null;
     let screenshotMs = 0;
     if (def.needsScreen && llm.supportsImages) {
@@ -245,6 +254,7 @@ async function runFeature(mode, userText) {
       system: def.system,
       turns: [{ role: 'user', text: built }],
       imageDataUrl,
+      maxTokens: getFeatureMaxTokens(settings, { mode, small: !!def.small }),
       onToken: (t) => {
         if (!firstTokenAt) firstTokenAt = Date.now();
         send('llm:token', { text: t });
@@ -260,6 +270,7 @@ async function runFeature(mode, userText) {
         const continued = await llm.stream({
           system: def.system,
           turns: [{ role: 'user', text: `${built}\n\nContinue the answer immediately after the text below. Do not repeat, restart, or add a preamble.\n\nAnswer so far:\n${fullText}` }],
+          maxTokens: getFeatureMaxTokens(settings, { mode, small: !!def.small }),
           onToken: (t) => {
             if (!firstTokenAt) firstTokenAt = Date.now();
             send('llm:token', { text: t });
@@ -377,6 +388,12 @@ ipcMain.handle('profile:set', (event, profile, enabled) => {
   } catch (error) {
     return { error: error && error.message ? error.message : 'Unable to save profile.' };
   }
+});
+ipcMain.handle('profile:clear', (event) => {
+  if (!isTrustedRenderer(event)) return null;
+  const cleared = store.clearProfile();
+  Object.assign(context, { resumeText: '', resumeName: '', company: '', role: '', responsibilities: '' });
+  return cleared;
 });
 ipcMain.handle('context:set', (event, patch) => {
   if (!isTrustedRenderer(event) || !patch || typeof patch !== 'object') return null;

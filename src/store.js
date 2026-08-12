@@ -105,7 +105,14 @@ function createStore({ file, safeStorage: storage, fs: fileSystem = fs }) {
     }
     save(); return getPublicProfile();
   }
-  return { getPublicProfile, getProfile, getPublicSettings, getSettings, getHistory, setHistory, setProfile, setSettings };
+  function clearProfile() {
+    load();
+    data.profileEnabled = false;
+    delete data.encryptedProfile;
+    save();
+    return getPublicProfile();
+  }
+  return { clearProfile, getPublicProfile, getProfile, getPublicSettings, getSettings, getHistory, setHistory, setProfile, setSettings };
 }
 
 const store = electron.app

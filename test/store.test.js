@@ -33,3 +33,12 @@ test('persists opted-in profile data encrypted and exposes only a safe summary',
   assert.equal(store.getProfile().resumeText, 'Built private systems.');
   assert.deepEqual(store.getPublicProfile(), { enabled: true, displayName: 'Lakshya', company: 'Acme', role: 'Engineer', responsibilities: 'Build reliable systems', resumeName: 'resume.pdf', hasResume: true });
 });
+
+test('removes saved personalization and encrypted resume data on request', () => {
+  const { store, file } = makeStore();
+  store.setProfile({ displayName: 'Lakshya', company: 'Acme', role: 'Engineer', responsibilities: 'Build reliable systems', resumeName: 'resume.pdf', resumeText: 'Built private systems.' }, true);
+  assert.deepEqual(store.clearProfile(), { enabled: false, displayName: '', company: '', role: '', responsibilities: '', resumeName: '', hasResume: false });
+  const disk = fs.readFileSync(file, 'utf8');
+  assert.doesNotMatch(disk, /encryptedProfile/);
+  assert.deepEqual(store.getProfile(), { enabled: false });
+});

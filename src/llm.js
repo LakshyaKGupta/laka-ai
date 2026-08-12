@@ -124,6 +124,11 @@ function getDefaultMaxTokens(settings) {
   return settings?.smart ? 900 : 450;
 }
 
+function getFeatureMaxTokens(settings, { mode, small }) {
+  if (small || mode === 'say') return settings.smart ? 360 : 260;
+  return settings.smart ? 1000 : 600;
+}
+
 function isRetryableProviderError(error) {
   const status = error && (error.status || error.code || error.statusCode);
   if (status === 429 || status === 503 || status === 408 || status === 500 || status === 502) return true;
@@ -211,4 +216,4 @@ function formatProviderError(error) {
   return message.slice(0, 600);
 }
 
-module.exports = { buildOpenAIChatMessages, createLLM, formatProviderError, getDefaultMaxTokens, getProviderCandidates, isRetryableProviderError, isTruncatedFinishReason };
+module.exports = { buildOpenAIChatMessages, createLLM, formatProviderError, getDefaultMaxTokens, getFeatureMaxTokens, getProviderCandidates, isRetryableProviderError, isTruncatedFinishReason };

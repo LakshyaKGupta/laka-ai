@@ -38,7 +38,7 @@ const MODES = {
       'Look at the screenshot and the recent conversation, decide what the user needs RIGHT NOW, and deliver it directly with no preamble. ' +
       'If the screen shows a coding/LeetCode problem: give a short approach, then a correct solution in a fenced code block, then time and space complexity. ' +
       'If it is a conversation: answer the current question or say exactly what the user should say next, in the first person. ' +
-      'Be concise and confident. Never say "I can see" or describe the screenshot.',
+      'Give one self-contained, complete answer. Be concise and confident; do not waste output repeating the prompt. Never say "I can see" or describe the screenshot.',
     build(ctx) {
       const t = formatTranscript(ctx.transcript, 12);
       return 'Recent conversation:\n' + (t || '(none)') + '\n\nRespond with what I need right now.' + buildContextBlock(ctx);
@@ -96,7 +96,7 @@ const MODES = {
     small: false,
     system:
       'You are Laka AI, a concise assistant grounded in the user\'s permitted conversation and profile context. ' +
-      'Answer the user\'s question directly, accurately, and concisely. No preamble.',
+      'Answer the user\'s question directly, accurately, and completely in one self-contained response. Favor evidence over guesses, and be concise. No preamble.',
     build(ctx) {
       const t = formatTranscript(ctx.transcript, 12);
       return (t ? 'Recent conversation:\n' + t + '\n\n' : '') + 'Question: ' + ctx.userText + buildContextBlock(ctx);

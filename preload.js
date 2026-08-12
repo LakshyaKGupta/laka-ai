@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('cue', {
   transcriptAdd: (text) => ipcRenderer.send('transcript:add', text),
   profileGet: () => ipcRenderer.invoke('profile:get'),
   profileSet: (profile, enabled) => ipcRenderer.invoke('profile:set', profile, enabled),
+  profileClear: () => ipcRenderer.invoke('profile:clear'),
   contextSet: (patch) => ipcRenderer.invoke('context:set', patch),
   resumeImport: () => ipcRenderer.invoke('resume:import'),
   micPcm: (arrayBuffer) => ipcRenderer.send('mic:pcm', arrayBuffer),

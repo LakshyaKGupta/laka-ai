@@ -174,3 +174,33 @@
 ### Pending Work
 - Add a user-owned OpenRouter key in Settings and make a live permitted text request to validate the provider externally; automated tests cover configuration and fallback ordering but do not consume API quotas.
 - Configure the Apple signing and notarization secrets from `docs/RELEASE.md` before pushing a version tag that triggers the release workflow.
+
+## Session Update - 2026-08-12 (personalization removal and voice answer freshness)
+
+### Objective
+- Let the user remove stored personalization, improve full-answer reliability without wasting output tokens, and make the voice-reply action use the freshest available speech.
+
+### Completed
+- Added **Remove saved personalization** in Settings. It clears the encrypted persisted profile/resume and all in-memory resume/company/role/responsibility context in one action.
+- Added feature-aware response budgets: concise voice and small actions use 260 Fast / 360 Smart tokens; direct Ask and Assist use 600 Fast / 1,000 Smart tokens. Explicit truncation still has the existing bounded automatic continuation as a safety net.
+- The user-triggered **What should I say?** action now flushes an available pending audio segment before prompting the model, so it uses the newest completed transcription rather than waiting for the next periodic flush.
+- Tightened Ask and Assist prompts to favor complete, self-contained, evidence-based answers without unnecessary repetition.
+
+### Files Modified
+- `main.js`, `preload.js`, `renderer/index.html`, `renderer/renderer.js`
+- `src/store.js`, `src/llm.js`, `src/prompts.js`
+- `test/store.test.js`, `test/response-budget.test.js`, `HANDOFF.md`
+
+### Architecture Decisions
+- Answer generation remains an explicit button action. Laka AI does not automatically generate or send answers from continuously captured audio.
+- Forced speech flushing is limited to a minimum viable segment and never consumes an undersized audio buffer, preserving accuracy and avoiding dropped partial speech.
+
+### Dependencies Added
+- None.
+
+### Verification
+- `npm test` passed: 30 tests.
+- `node --check main.js`, `node --check preload.js`, `node --check renderer/renderer.js`, and `node --check src/llm.js` passed.
+
+### Pending Work
+- Real microphone/meeting-audio accuracy still needs a permitted live test using the selected microphone or BlackHole/Loopback device and the user's provider key; unit tests cannot validate physical device routing or a provider's external transcription quality.

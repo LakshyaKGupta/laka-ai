@@ -476,6 +476,17 @@
   $('#clear-history').addEventListener('click', async () => {
     if (await cue.historyClear()) { clearMessages(); showStatus('Conversation history cleared.'); }
   });
+  $('#clear-personalization').addEventListener('click', async () => {
+    profile = await cue.profileClear();
+    resumeName = '';
+    $('#remember-profile').checked = false;
+    $('#display-name').value = '';
+    $('#company').value = '';
+    $('#role').value = '';
+    $('#responsibilities').value = '';
+    $('#resume-status').textContent = 'Not loaded';
+    showStatus('Saved personalization and resume removed from this Mac.');
+  });
   $('#quit-app').addEventListener('click', () => cue.quit());
 
   // ---- example conversation (matches the reference screenshot) ------------

@@ -320,3 +320,27 @@
 ### Verification
 - `npm test` passed: 38 tests.
 - `node --check src/screen.js`, `node --check src/screen-size.js`, and `node --check src/llm.js` passed.
+
+## Session Update - 2026-08-12 (v2.1.4 answer accuracy guard)
+
+### Objective
+- Stop fast but fabricated Assist responses and remove meta/greeting output across Assist, voice, and typed answers.
+
+### Completed
+- Marked provider candidates by image capability and made screen Assist select only vision-capable candidates (Gemini, OpenAI, Anthropic, Nvidia). Groq and OpenRouter are skipped for a request that includes a screenshot.
+- Screen Assist now reports a clear setup requirement rather than sending a screenshot-less request to a text-only model and guessing from stale context.
+- Tightened Assist, voice, and typed-answer instructions to produce only the self-contained final answer: no greeting, planning narration, “I should say” wrapper, or duplicate text.
+- Versioned the app as `2.1.4`.
+
+### Files Modified
+- `package.json`, `package-lock.json`, `main.js`, `src/llm.js`, `src/prompts.js`, `test/providers.test.js`, `test/performance.test.js`, `HANDOFF.md`
+
+### Architecture Decisions
+- Vision accuracy takes priority over a text-only fallback for screen-dependent actions. Free Groq/OpenRouter remain usable for text/voice reply actions, but cannot truthfully inspect a screenshot.
+
+### Dependencies Added
+- None.
+
+### Verification
+- `npm test` passed: 40 tests.
+- `node --check main.js`, `node --check src/llm.js`, and `node --check src/prompts.js` passed.

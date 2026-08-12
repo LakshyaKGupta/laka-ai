@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { buildOpenAIChatMessages, formatProviderError, getDefaultMaxTokens, getProviderCandidates, isRetryableProviderError, isTruncatedFinishReason } = require('../src/llm');
+const { buildOpenAIChatMessages, createLLM, formatProviderError, getDefaultMaxTokens, getProviderCandidates, isRetryableProviderError, isTruncatedFinishReason } = require('../src/llm');
 
 test('treats quota and overload failures as retryable', () => {
   assert.equal(isRetryableProviderError({ status: 429 }), true);
@@ -56,4 +56,17 @@ test('recognizes provider token-limit finish reasons for automatic continuation'
   assert.equal(isTruncatedFinishReason('max_tokens'), true);
   assert.equal(isTruncatedFinishReason('MAX_TOKENS'), true);
   assert.equal(isTruncatedFinishReason('stop'), false);
+});
+
+test('keeps screen Assist on a vision-capable provider instead of a text-only fallback', () => {
+  const llm = createLLM({
+    provider: 'groq', smart: false, freeTierOnly: false,
+    apiKeys: { groq: 'g', openai: 'o' },
+    models: {
+      groq: { fast: 'llama-3.1-8b-instant' },
+      openai: { fast: 'gpt-4o-mini' }
+    }
+  });
+  assert.equal(llm.supportsImages, true);
+  assert.equal(llm.getCandidates({ requiresImages: true }).map((entry) => entry.provider).join(','), 'openai');
 });

@@ -230,6 +230,12 @@ async function runFeature(mode, userText) {
       send('status', { message: setup.message ? setup.message + ' Open Settings with the gear icon to fix it.' : fallback });
       return;
     }
+    if (def.needsScreen && !llm.supportsImages) {
+      const message = 'Screen Assist needs a vision-capable provider. Select Gemini, OpenAI, Anthropic, or Nvidia with a configured key.';
+      send('llm:error', { message });
+      send('status', { message });
+      return;
+    }
 
     if (mode === 'say') {
       await flushPendingAudio();
@@ -264,6 +270,7 @@ async function runFeature(mode, userText) {
       system: def.system,
       turns: [{ role: 'user', text: built }],
       imageDataUrl,
+      requiresImages: Boolean(imageDataUrl),
       maxTokens: getFeatureMaxTokens(settings, { mode, small: !!def.small }),
       onToken: (t) => {
         if (!firstTokenAt) firstTokenAt = Date.now();
@@ -281,6 +288,7 @@ async function runFeature(mode, userText) {
           system: def.system,
           turns: [{ role: 'user', text: `${built}\n\nContinue the answer immediately after the text below. Do not repeat, restart, or add a preamble.\n\nAnswer so far:\n${fullText}` }],
           maxTokens: getFeatureMaxTokens(settings, { mode, small: !!def.small }),
+          requiresImages: Boolean(imageDataUrl),
           onToken: (t) => {
             if (!firstTokenAt) firstTokenAt = Date.now();
             send('llm:token', { text: t });

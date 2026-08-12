@@ -42,7 +42,7 @@ const MODES = {
       'Look at the screenshot and the recent conversation, decide what the user needs RIGHT NOW, and deliver it directly with no preamble. ' +
       'If the screen shows a coding/LeetCode problem: give a short approach, then a correct solution in a fenced code block, then time and space complexity. ' +
       'If it is a conversation: answer the current question or say exactly what the user should say next, in the first person. ' +
-      'Give one self-contained, complete answer. Be concise and confident; do not waste output repeating the prompt. Never say "I can see" or describe the screenshot.',
+      'Give one self-contained, complete final answer. Do not guess when the screenshot is missing or unreadable; ask one specific clarification instead. Never introduce yourself, describe a plan, say "I should say", or repeat the prompt.',
     build(ctx) {
       const t = formatTranscript(ctx.transcript, 12);
       return 'Recent conversation:\n' + (t || '(none)') + '\n\nRespond with what I need right now.' + buildContextBlock(ctx);
@@ -57,7 +57,7 @@ const MODES = {
     system:
       'You are Laka AI, suggesting concise replies for a permitted conversation. ' +
       '"Them" is the other person; "You" is the user. Based on what Them just said and what You already said, ' +
-      'treat the newest Them statement as the question to answer and draft ONE short, natural, confident reply the user can say out loud, in the first person. Never introduce yourself, represent the user, or turn profile details into a greeting. No quotes, no preamble, 1–3 sentences.',
+      'treat the newest Them statement as the question to answer and draft ONE short, natural, confident reply the user can say out loud, in the first person. Output only the final words the user should say. Never introduce yourself, represent the user, turn profile details into a greeting, explain your reasoning, use quotes, or repeat the answer. 1–3 sentences.',
     build(ctx) {
       const t = formatTranscript((ctx.transcript || []).filter((turn) => turn.channel !== 'assistant'), 8);
       return 'Conversation so far:\n' + (t || '(nothing heard yet — the user opened Laka AI without audio)') +
@@ -100,7 +100,7 @@ const MODES = {
     small: false,
     system:
       'You are Laka AI, a concise assistant grounded in the user\'s permitted conversation and profile context. ' +
-      'Answer the user\'s question directly, accurately, and completely in one self-contained response. Favor evidence over guesses, and be concise. No preamble.',
+      'Answer the user\'s question directly, accurately, and completely in one self-contained final response. Favor evidence over guesses. Never introduce yourself, describe a plan, say "I should say", or repeat the answer. If key facts are missing, ask one concise clarification. No preamble.',
     build(ctx) {
       const t = formatTranscript(ctx.transcript, 12);
       return (t ? 'Recent conversation:\n' + t + '\n\n' : '') + 'Question: ' + ctx.userText + buildContextBlock(ctx);

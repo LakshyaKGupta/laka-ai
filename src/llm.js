@@ -27,6 +27,10 @@ function isTruncatedFinishReason(reason) {
   return new Set(['length', 'max_tokens', 'MAX_TOKENS']).has(reason);
 }
 
+function isVisionProvider(provider) {
+  return !['groq', 'openrouter'].includes(provider);
+}
+
 async function streamOpenAI({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken, baseURL, supportsImages = true }) {
   if (DEBUG) console.log('[DEBUG LLM] streamOpenAI called', { model, baseURL, hasImage: !!imageDataUrl, maxTokens });
   const OpenAI = require('openai');
@@ -145,7 +149,7 @@ function getProviderCandidates(settings) {
   const push = (provider) => {
     const model = (settings.models[provider] || {})[tier];
     if (!model || !keys[provider]) return;
-    candidates.push({ provider, model, apiKey: keys[provider] });
+    candidates.push({ provider, model, apiKey: keys[provider], supportsImages: isVisionProvider(provider) });
   };
 
   push(selectedProvider);
@@ -178,13 +182,17 @@ function createLLM(settings) {
 
   return {
     provider, model, apiKey,
-    supportsImages: primary ? !['groq', 'openrouter'].includes(primary.provider) : false,
+    supportsImages: candidates.some((candidate) => candidate.supportsImages),
     ready: Boolean(primary) && !freeTierBlocked,
     error: freeTierBlocked ? 'Free-tier only is enabled. Select Gemini, Groq, or OpenRouter with a supported free-tier model.' : (!primary ? 'Add a provider API key in Settings before asking Laka AI for help.' : ''),
+    getCandidates(params = {}) {
+      return params.requiresImages ? candidates.filter((candidate) => candidate.supportsImages) : candidates;
+    },
     async stream(params) {
       if (DEBUG) console.log('[DEBUG LLM] stream() invoked for provider:', provider);
       let lastError = null;
-      for (const candidate of candidates) {
+      const streamCandidates = this.getCandidates(params);
+      for (const candidate of streamCandidates) {
         try {
           const args = { apiKey: candidate.apiKey, model: candidate.model, maxTokens, ...params };
           let result;
@@ -195,13 +203,13 @@ function createLLM(settings) {
           else if (candidate.provider === 'anthropic') result = await streamAnthropic(args);
           else if (candidate.provider === 'gemini') result = await streamGemini(args);
           else throw new Error('unknown provider: ' + candidate.provider);
-          return { ...result, provider: candidate.provider, model: candidate.model, attempts: candidates.indexOf(candidate) + 1 };
+          return { ...result, provider: candidate.provider, model: candidate.model, attempts: streamCandidates.indexOf(candidate) + 1 };
         } catch (error) {
           if (error && typeof error === 'object') error.lakaProvider = candidate.provider;
           lastError = error;
         }
       }
-      throw lastError || new Error('unknown provider: ' + provider);
+      throw lastError || new Error(params.requiresImages ? 'No vision-capable provider is configured for screen Assist.' : 'unknown provider: ' + provider);
     }
   };
 }
@@ -217,4 +225,4 @@ function formatProviderError(error) {
   return message.slice(0, 600);
 }
 
-module.exports = { buildOpenAIChatMessages, createLLM, formatProviderError, getDefaultMaxTokens, getFeatureMaxTokens, getProviderCandidates, isRetryableProviderError, isTruncatedFinishReason };
+module.exports = { buildOpenAIChatMessages, createLLM, formatProviderError, getDefaultMaxTokens, getFeatureMaxTokens, getProviderCandidates, isRetryableProviderError, isTruncatedFinishReason, isVisionProvider };

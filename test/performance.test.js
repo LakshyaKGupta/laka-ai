@@ -40,3 +40,9 @@ test('keeps voice replies focused on the newest captured conversation turns', ()
   assert.doesNotMatch(prompt, /old-one/);
   assert.match(prompt, /What measurable product outcome did you improve\?/);
 });
+
+test('voice replies request only the final words the user should say', () => {
+  assert.match(MODES.say.system, /Output only the final words/);
+  assert.match(MODES.ask.system, /Never introduce yourself/);
+  assert.match(MODES.assist.system, /Do not guess/);
+});

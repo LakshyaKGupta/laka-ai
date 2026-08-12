@@ -6,7 +6,7 @@ const store = require('./src/store');
 const { captureScreenshot } = require('./src/screen');
 const { createSTT } = require('./src/stt');
 const { createLLM, formatProviderError, getFeatureMaxTokens, isTruncatedFinishReason } = require('./src/llm');
-const { MODES } = require('./src/prompts');
+const { MODES, hasRemoteTranscript } = require('./src/prompts');
 const { rms16 } = require('./src/wav');
 const { takeAudioChunk } = require('./src/audio-buffer');
 const { extractResumeText } = require('./src/resume');
@@ -229,7 +229,15 @@ async function runFeature(mode, userText) {
       return;
     }
 
-    if (mode === 'say') await flushPendingAudio();
+    if (mode === 'say') {
+      await flushPendingAudio();
+      if (!hasRemoteTranscript(transcript)) {
+        const message = 'No other-speaker audio has been transcribed yet. Keep listening, then press What should I say? again.';
+        send('llm:error', { message });
+        send('status', { message });
+        return;
+      }
+    }
 
     let imageDataUrl = null;
     let screenshotMs = 0;
@@ -290,7 +298,7 @@ async function runFeature(mode, userText) {
       send('llm:incomplete', { message: 'The answer reached its limit. Select Continue to finish it.' });
     }
     if (fullText && fullText.trim()) {
-      transcript.push({ channel: 'them', text: fullText.trim(), ts: Date.now() });
+      transcript.push({ channel: 'assistant', text: fullText.trim(), ts: Date.now() });
       while (transcript.length > MAX_TRANSCRIPT_TURNS) transcript.shift();
       persistTranscriptHistory();
     }

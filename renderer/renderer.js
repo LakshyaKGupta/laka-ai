@@ -489,16 +489,6 @@
   });
   $('#quit-app').addEventListener('click', () => cue.quit());
 
-  // ---- example conversation (matches the reference screenshot) ------------
-  function showExample() {
-    clearMessages();
-    addUserBubble('What should I say?');
-    const ai = document.createElement('div');
-    ai.className = 'ai-text';
-    ai.textContent = '“A discounted cash flow model values a company by projecting future free cash flows and discounting them to present value using the weighted average cost of capital.”';
-    messages.appendChild(ai);
-  }
-
   // ---- global keys -------------------------------------------------------
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !scrim.classList.contains('hidden')) closeSettings();
@@ -596,7 +586,7 @@
       $('#placeholder').innerHTML = 'Ask about your screen or conversation, or <span class="keycap">Ctrl</span><span class="keycap">⏎</span> for Assist';
     }
     smartBtn.classList.toggle('on', !!settings.smart);
-    showExample();
+    clearMessages();
     syncPlaceholder();
     const st = await cue.captureState();
     $('#live-dot').classList.toggle('off', !st.active);

@@ -204,3 +204,28 @@
 
 ### Pending Work
 - Real microphone/meeting-audio accuracy still needs a permitted live test using the selected microphone or BlackHole/Loopback device and the user's provider key; unit tests cannot validate physical device routing or a provider's external transcription quality.
+
+## Session Update - 2026-08-12 (speaker-role correction)
+
+### Objective
+- Stop Laka AI from displaying demo content as a live reply or mistaking its own output for the remote speaker.
+
+### Completed
+- Removed the startup DCF example conversation from the live message panel.
+- Stored generated LLM output as `assistant` instead of `them`; prompt formatting now labels it as `Laka AI` when needed.
+- Voice-reply prompts exclude prior Laka AI output entirely, so only the captured user/remote-speaker transcript determines what the user should say.
+- The **What should I say?** action now gives a clear recovery message instead of fabricating a profile-based greeting when no other-speaker transcription exists.
+
+### Files Modified
+- `main.js`, `renderer/renderer.js`, `src/prompts.js`, `test/performance.test.js`, `HANDOFF.md`
+
+### Architecture Decisions
+- `them` is reserved solely for speech captured from the selected meeting-audio input. `assistant` represents Laka AI generated text and is not fed into voice-reply generation.
+- Existing historic entries created before this fix may still be labeled `them`; use Clear conversation history once to remove that old context.
+
+### Dependencies Added
+- None.
+
+### Verification
+- `npm test` passed: 32 tests.
+- `node --check main.js`, `node --check renderer/renderer.js`, and `node --check src/prompts.js` passed.

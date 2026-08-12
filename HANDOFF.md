@@ -110,3 +110,28 @@
 
 ### Notes For Next Agent
 - The source app was restarted after this change. The downloadable archive is unsigned until Apple signing credentials are configured.
+
+## Session Update - 2026-08-12 (answer completion and diagnostics)
+
+### Objective
+- Prevent cut-off LLM answers, expose local reliability diagnostics, and improve observability for voice latency.
+
+### Completed
+- Preserved each provider's finish reason through the streaming boundary and recognize length/max-token stops from Gemini, Anthropic, and OpenAI-compatible providers.
+- Automatically continue a truncated answer once without duplicating prior text. If it remains incomplete or the retry fails, retain the partial reply and offer a user-controlled Continue action.
+- Added local-only diagnostics for Laka AI requests, listening state, selected meeting-audio input, transcription provider/outcome, audio duration, and latency. Diagnostics never record API keys or transcript content.
+- No work was added to bypass monitoring, proctoring, tab-switch, or focus checks.
+
+### Files Modified
+- `main.js`, `preload.js`, `renderer/index.html`, `renderer/renderer.js`, `renderer/styles.css`
+- `src/llm.js`, `test/providers.test.js`, `HANDOFF.md`
+
+### Architecture Decisions
+- Continuation is bounded to one automatic attempt per answer; later completion requires an explicit user action to control cost and prevent loops.
+- Diagnostics report only Laka AI's own state and timing, never external application state or hidden-focus behavior.
+
+### Verification
+- `npm test` passed: 26 tests.
+- `node --check main.js`, `node --check preload.js`, and `node --check renderer/renderer.js` passed.
+- `npm audit --omit=dev --audit-level=high` found 0 production vulnerabilities.
+- `npm run pack` completed with ASAR enabled; signing/notarization was skipped because Apple credentials are not configured locally.

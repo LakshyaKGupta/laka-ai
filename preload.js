@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('cue', {
   captureState: () => ipcRenderer.invoke('capture:state'),
   quit: () => ipcRenderer.invoke('app:quit'),
   historyClear: () => ipcRenderer.invoke('history:clear'),
+  answerContinue: () => ipcRenderer.invoke('answer:continue'),
   usageGet: () => ipcRenderer.invoke('usage:get'),
   clipboardRead: () => ipcRenderer.invoke('clipboard:read'),
   clipboardWrite: (text) => ipcRenderer.invoke('clipboard:write', text),
@@ -26,7 +27,7 @@ contextBridge.exposeInMainWorld('cue', {
   requestPermissions: () => ipcRenderer.invoke('permissions:request'),
   log: (msg) => ipcRenderer.send('log', msg),
   on: (channel, cb) => {
-    const allowed = ['capture:state', 'llm:start', 'llm:token', 'llm:done', 'llm:error', 'status', 'transcript', 'usage:update'];
+    const allowed = ['capture:state', 'llm:start', 'llm:token', 'llm:done', 'llm:error', 'llm:incomplete', 'status', 'transcript', 'transcription:update', 'usage:update'];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => cb(data));
   }

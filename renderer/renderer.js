@@ -25,6 +25,7 @@
   let apiKeyInputs = { openai: '', anthropic: '', gemini: '', groq: '', nvidia: '' };
   let caretEl = null;
   let usage = { requests: 0, freeTierOnly: true };
+  const diagnostics = [];
   let resumeName = '';
   let lastAiText = '';
   let profile = { enabled: false, displayName: '', company: '', role: '', responsibilities: '', resumeName: '', hasResume: false };
@@ -100,6 +101,12 @@
   }
 
   function setBusy(v) { busy = v; $('#send-btn').classList.toggle('busy', v); }
+  function recordDiagnostic(message) {
+    diagnostics.unshift(`${new Date().toLocaleTimeString()} · ${message}`);
+    diagnostics.splice(15);
+    const target = $('#diagnostics');
+    if (target) target.textContent = diagnostics.join('\n') || 'No diagnostics yet.';
+  }
 
   // ---- actions -----------------------------------------------------------
   function runMode(mode, text) {
@@ -203,6 +210,7 @@
       micProc.port.onmessage = (e) => cue.micPcm(e.data);
       const sink = audioCtx.createGain(); sink.gain.value = 0; // run processor silently
       micNode.connect(micProc); micProc.connect(sink); sink.connect(audioCtx.destination);
+      recordDiagnostic('Microphone input started');
     } catch (err) {
       cue.log('mic error: ' + (err && err.message));
     }
@@ -235,6 +243,8 @@
         sysProc.port.onmessage = (e) => cue.systemPcm(e.data);
         const sink = sysCtx.createGain(); sink.gain.value = 0;
         sysNode.connect(sysProc); sysProc.connect(sink); sink.connect(sysCtx.destination);
+        const selectedInput = $('#meeting-audio-device').selectedOptions[0];
+        recordDiagnostic(`Meeting audio input started: ${selectedInput ? selectedInput.textContent : 'selected device'}`);
         showStatus('Meeting audio input is active. Make sure Meet output is routed to your virtual device and headphones.');
         return;
       }
@@ -274,9 +284,11 @@
     $('#live-dot').classList.toggle('off', !active);
     $('#stop-btn').classList.toggle('active', active);
     if (active) {
+      recordDiagnostic('Listening started');
       startMic().catch(() => {});
       startSystemAudio().catch(() => {});
     } else {
+      recordDiagnostic('Listening stopped');
       stopMic();
       stopSystemAudio();
     }
@@ -285,21 +297,43 @@
     if (userBubble) addUserBubble(userBubble);
     startAi(!!small);
     setBusy(true);
+    recordDiagnostic('Answer request started');
   });
   cue.on('llm:token', ({ text }) => appendToken(text));
-  cue.on('llm:done', () => { finalizeAi(); setBusy(false); });
+  cue.on('llm:done', () => { finalizeAi(); setBusy(false); recordDiagnostic('Answer request completed'); });
   cue.on('llm:error', ({ message }) => {
     if (!aiEl) startAi(true);
     aiEl.dataset.raw = message; finalizeAi(); setBusy(false);
     lastAiText = message;
+    recordDiagnostic('Answer request failed');
     if (message) showStatus(message + (message.includes('Settings') ? '' : ' Open Settings with the gear icon to fix it.'));
+  });
+  cue.on('llm:incomplete', ({ message }) => {
+    const button = document.createElement('button');
+    button.className = 's-secondary';
+    button.type = 'button';
+    button.textContent = 'Continue answer';
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      button.textContent = 'Continuing…';
+      const accepted = await cue.answerContinue();
+      if (!accepted) { button.disabled = false; button.textContent = 'Continue answer'; }
+    });
+    messages.appendChild(button);
+    showStatus(message);
+    recordDiagnostic('Answer needs continuation');
+    scrollMessagesToBottom();
   });
   cue.on('transcript', ({ channel, text }) => {
     const bubble = document.createElement('div');
     bubble.className = 'transcript-bubble';
     bubble.textContent = `${channel === 'you' ? 'You' : 'Other speaker'}: ${text}`;
     messages.appendChild(bubble);
+    recordDiagnostic(`Transcript received from ${channel === 'you' ? 'microphone' : 'meeting audio'}`);
     scrollMessagesToBottom();
+  });
+  cue.on('transcription:update', ({ channel, provider, durationMs, latencyMs, outcome }) => {
+    recordDiagnostic(`${channel === 'you' ? 'Microphone' : 'Meeting'} STT · ${provider} · ${outcome} · ${(durationMs / 1000).toFixed(1)}s audio / ${(latencyMs / 1000).toFixed(1)}s`);
   });
   let statusTimer = null;
   function showStatus(message) {
@@ -319,7 +353,12 @@
     cue.log('[status] ' + message);
     showStatus(message);
   });
-  cue.on('usage:update', (next) => { usage = next; updateUsage(); });
+  cue.on('usage:update', (next) => {
+    usage = next;
+    updateUsage();
+    const latency = next.latency || {};
+    recordDiagnostic(`Provider ${latency.provider || 'unknown'} · ${latency.completion || 'unknown'} · ${(latency.totalMs || 0) / 1000}s · ${latency.attempts || 1} attempt(s)`);
+  });
 
   // ---- settings ----------------------------------------------------------
   const scrim = $('#settings-scrim');
@@ -357,6 +396,7 @@
     $('#role').value = $('#role').value || profile.role || '';
     $('#responsibilities').value = $('#responsibilities').value || profile.responsibilities || '';
     $('#resume-status').textContent = resumeName || profile.resumeName || 'Not loaded';
+    $('#diagnostics').textContent = diagnostics.join('\n') || 'No diagnostics yet.';
     updateUsage();
     $('#s-status').textContent = statusText();
   }
@@ -368,7 +408,10 @@
   }
   function updateUsage() {
     const timing = usage.latency && usage.latency.firstTokenMs ? ` · first token ${(usage.latency.firstTokenMs / 1000).toFixed(1)}s` : '';
-    const text = `${usage.requests || 0} requests this session · ${usage.freeTierOnly ? 'free-tier only is on' : 'paid models may be used'}${timing}`;
+    const details = usage.latency || {};
+    const completion = details.completion ? ` · ${details.completion}` : '';
+    const provider = details.provider ? ` · ${details.provider}` : '';
+    const text = `${usage.requests || 0} requests this session · ${usage.freeTierOnly ? 'free-tier only is on' : 'paid models may be used'}${provider}${completion}${timing}`;
     $('#usage-status').textContent = text;
   }
   document.querySelectorAll('#provider-seg button').forEach((b) => b.addEventListener('click', () => {

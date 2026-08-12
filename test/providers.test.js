@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { buildOpenAIChatMessages, formatProviderError, getDefaultMaxTokens, getProviderCandidates, isRetryableProviderError } = require('../src/llm');
+const { buildOpenAIChatMessages, formatProviderError, getDefaultMaxTokens, getProviderCandidates, isRetryableProviderError, isTruncatedFinishReason } = require('../src/llm');
 
 test('treats quota and overload failures as retryable', () => {
   assert.equal(isRetryableProviderError({ status: 429 }), true);
@@ -48,4 +48,11 @@ test('keeps Groq chat payloads text-only even when a feature captured a screensh
     supportsImages: false
   });
   assert.equal(messages[1].content, 'Answer this.');
+});
+
+test('recognizes provider token-limit finish reasons for automatic continuation', () => {
+  assert.equal(isTruncatedFinishReason('length'), true);
+  assert.equal(isTruncatedFinishReason('max_tokens'), true);
+  assert.equal(isTruncatedFinishReason('MAX_TOKENS'), true);
+  assert.equal(isTruncatedFinishReason('stop'), false);
 });

@@ -1,6 +1,6 @@
 const DEBUG = false; // Set to false to disable debug logging
 // LLM factory — OpenAI / Anthropic / Gemini behind one streaming interface.
-// stream({ system, turns:[{role,text}], imageDataUrl, maxTokens, onToken }) -> Promise<fullText>
+// stream({ system, turns:[{role,text}], imageDataUrl, maxTokens, onToken }) -> Promise<{text, finishReason}>
 
 function stripDataUrl(dataUrl) {
   const m = /^data:(.+?);base64,(.*)$/s.exec(dataUrl || '');
@@ -23,6 +23,10 @@ function buildOpenAIChatMessages({ system, turns, imageDataUrl, supportsImages =
   return messages;
 }
 
+function isTruncatedFinishReason(reason) {
+  return new Set(['length', 'max_tokens', 'MAX_TOKENS']).has(reason);
+}
+
 async function streamOpenAI({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken, baseURL, supportsImages = true }) {
   if (DEBUG) console.log('[DEBUG LLM] streamOpenAI called', { model, baseURL, hasImage: !!imageDataUrl, maxTokens });
   const OpenAI = require('openai');
@@ -32,12 +36,14 @@ async function streamOpenAI({ apiKey, model, system, turns, imageDataUrl, maxTok
   try {
     const stream = await client.chat.completions.create({ model, messages, stream: true, max_tokens: maxTokens });
     let full = '';
+    let finishReason = 'unknown';
     for await (const part of stream) {
       const d = part.choices && part.choices[0] && part.choices[0].delta && part.choices[0].delta.content;
       if (d) { full += d; onToken(d); }
+      if (part.choices && part.choices[0] && part.choices[0].finish_reason) finishReason = part.choices[0].finish_reason;
     }
     if (DEBUG) console.log('[DEBUG LLM] streamOpenAI finished successfully, total length:', full.length);
-    return full;
+    return { text: full, finishReason };
   } catch (err) {
     if (DEBUG) console.error('[DEBUG LLM] streamOpenAI error:', err);
     throw err;
@@ -63,11 +69,13 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
   try {
     const stream = await client.messages.create({ model, max_tokens: maxTokens, system, messages, stream: true });
     let full = '';
+    let finishReason = 'unknown';
     for await (const ev of stream) {
       if (ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta') { full += ev.delta.text; onToken(ev.delta.text); }
+      if (ev.type === 'message_delta' && ev.delta && ev.delta.stop_reason) finishReason = ev.delta.stop_reason;
     }
     if (DEBUG) console.log('[DEBUG LLM] streamAnthropic finished successfully, total length:', full.length);
-    return full;
+    return { text: full, finishReason };
   } catch (err) {
     if (DEBUG) console.error('[DEBUG LLM] streamAnthropic error:', err);
     throw err;
@@ -104,7 +112,7 @@ async function streamGemini({ apiKey, model, system, turns, imageDataUrl, maxTok
       }
     }
     if (DEBUG) console.log('[DEBUG LLM] streamGemini finished successfully, total length:', full.length, 'finishReason:', lastFinishReason);
-    return full;
+    return { text: full, finishReason: lastFinishReason };
   } catch (err) {
     if (DEBUG) console.error('[DEBUG LLM] streamGemini error:', err);
     throw err;
@@ -171,12 +179,14 @@ function createLLM(settings) {
       for (const candidate of candidates) {
         try {
           const args = { apiKey: candidate.apiKey, model: candidate.model, maxTokens, ...params };
-          if (candidate.provider === 'openai') return await streamOpenAI(args);
-          if (candidate.provider === 'groq') return await streamOpenAI({ ...args, baseURL: 'https://api.groq.com/openai/v1', supportsImages: false });
-          if (candidate.provider === 'nvidia') return await streamOpenAI({ ...args, baseURL: 'https://integrate.api.nvidia.com/v1' });
-          if (candidate.provider === 'anthropic') return await streamAnthropic(args);
-          if (candidate.provider === 'gemini') return await streamGemini(args);
-          throw new Error('unknown provider: ' + candidate.provider);
+          let result;
+          if (candidate.provider === 'openai') result = await streamOpenAI(args);
+          else if (candidate.provider === 'groq') result = await streamOpenAI({ ...args, baseURL: 'https://api.groq.com/openai/v1', supportsImages: false });
+          else if (candidate.provider === 'nvidia') result = await streamOpenAI({ ...args, baseURL: 'https://integrate.api.nvidia.com/v1' });
+          else if (candidate.provider === 'anthropic') result = await streamAnthropic(args);
+          else if (candidate.provider === 'gemini') result = await streamGemini(args);
+          else throw new Error('unknown provider: ' + candidate.provider);
+          return { ...result, provider: candidate.provider, model: candidate.model, attempts: candidates.indexOf(candidate) + 1 };
         } catch (error) {
           if (error && typeof error === 'object') error.lakaProvider = candidate.provider;
           lastError = error;
@@ -198,4 +208,4 @@ function formatProviderError(error) {
   return message.slice(0, 600);
 }
 
-module.exports = { buildOpenAIChatMessages, createLLM, formatProviderError, getDefaultMaxTokens, isRetryableProviderError, getProviderCandidates };
+module.exports = { buildOpenAIChatMessages, createLLM, formatProviderError, getDefaultMaxTokens, getProviderCandidates, isRetryableProviderError, isTruncatedFinishReason };

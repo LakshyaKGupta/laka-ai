@@ -4,7 +4,7 @@ const path = require('path');
 const store = require('./src/store');
 const { captureScreenshot } = require('./src/screen');
 const { createSTT } = require('./src/stt');
-const { createLLM, formatProviderError } = require('./src/llm');
+const { createLLM, formatProviderError, isTruncatedFinishReason } = require('./src/llm');
 const { MODES } = require('./src/prompts');
 const { rms16 } = require('./src/wav');
 const { takeAudioChunk } = require('./src/audio-buffer');
@@ -14,7 +14,7 @@ const { boundedText, getSetupStatus, sanitizeAskPayload, sanitizeSettingsPatch, 
 let win = null;
 
 // -------- capture / transcript state --------
-const state = { capturing: false, busy: false, requests: 0, transcribing: { you: false, them: false } };
+const state = { capturing: false, busy: false, requests: 0, transcribing: { you: false, them: false }, incompleteContinuation: null };
 let sttDisabled = false; // set when the key can't reach any speech model (stops retry spam)
 const buffers = { you: [], them: [] };
 const bufferBytes = { you: 0, them: 0 };
@@ -111,6 +111,7 @@ async function flushChannel(channel) {
   if (rms16(pcm) < RMS_GATE) return; // silence gate
 
   state.transcribing[channel] = true;
+  const transcriptionStartedAt = Date.now();
   try {
     const settings = store.getSettings();
     settings.localSpeechRuntimeDir = path.join(app.getPath('userData'), 'faster-whisper-python');
@@ -122,9 +123,11 @@ async function flushChannel(channel) {
     }
     const res = await stt.transcribe(pcm);
     if (res.error) {
+      send('transcription:update', { channel, provider: res.error.provider || 'unknown', durationMs: Math.round(pcm.length / 32), latencyMs: Date.now() - transcriptionStartedAt, outcome: 'error' });
       handleSttError(res.error);
       return;
     }
+    send('transcription:update', { channel, provider: res.provider || 'unknown', durationMs: Math.round(pcm.length / 32), latencyMs: Date.now() - transcriptionStartedAt, outcome: res.text && res.text.trim() ? 'transcribed' : 'empty' });
     if (res.text && res.text.trim()) {
       const turn = { channel, text: res.text.trim(), ts: Date.now() };
       transcript.push(turn);
@@ -230,7 +233,7 @@ async function runFeature(mode, userText) {
     const built = def.build({ transcript, userText: userText || '', ...context });
     if (DEBUG) console.log('[DEBUG MAIN] Built prompt. Starting LLM stream...');
     let firstTokenAt = 0;
-    const fullText = await llm.stream({
+    const first = await llm.stream({
       system: def.system,
       turns: [{ role: 'user', text: built }],
       imageDataUrl,
@@ -239,6 +242,34 @@ async function runFeature(mode, userText) {
         send('llm:token', { text: t });
       }
     });
+    let fullText = first.text;
+    let completion = first.finishReason;
+    let attempts = first.attempts;
+    let incompleteNotified = false;
+    if (isTruncatedFinishReason(completion)) {
+      send('status', { message: 'Completing the answer…' });
+      try {
+        const continued = await llm.stream({
+          system: def.system,
+          turns: [{ role: 'user', text: `${built}\n\nContinue the answer immediately after the text below. Do not repeat, restart, or add a preamble.\n\nAnswer so far:\n${fullText}` }],
+          onToken: (t) => {
+            if (!firstTokenAt) firstTokenAt = Date.now();
+            send('llm:token', { text: t });
+          }
+        });
+        fullText += continued.text;
+        completion = continued.finishReason;
+        attempts += continued.attempts;
+      } catch (error) {
+        state.incompleteContinuation = { system: def.system, prompt: built, text: fullText, small: !!def.small };
+        send('llm:incomplete', { message: 'The answer was cut short and could not be completed automatically. Continue when ready.' });
+        incompleteNotified = true;
+      }
+    }
+    if (isTruncatedFinishReason(completion) && !incompleteNotified) {
+      state.incompleteContinuation = { system: def.system, prompt: built, text: fullText, small: !!def.small };
+      send('llm:incomplete', { message: 'The answer reached its limit. Select Continue to finish it.' });
+    }
     if (fullText && fullText.trim()) {
       transcript.push({ channel: 'them', text: fullText.trim(), ts: Date.now() });
       while (transcript.length > MAX_TRANSCRIPT_TURNS) transcript.shift();
@@ -248,12 +279,40 @@ async function runFeature(mode, userText) {
     send('usage:update', {
       requests: state.requests,
       freeTierOnly: settings.freeTierOnly,
-      latency: { firstTokenMs: firstTokenAt ? firstTokenAt - startedAt : null, totalMs: Date.now() - startedAt, screenshotMs, promptChars: built.length }
+      latency: { firstTokenMs: firstTokenAt ? firstTokenAt - startedAt : null, totalMs: Date.now() - startedAt, screenshotMs, promptChars: built.length, outputChars: fullText.length, completion, provider: first.provider, model: first.model, attempts }
     });
     if (DEBUG) console.log('[DEBUG MAIN] Full LLM Output:\n', fullText);
     send('llm:done', {});
   } catch (e) {
     send('llm:error', { message: formatProviderError(e) });
+  } finally {
+    state.busy = false;
+  }
+}
+
+async function continueIncompleteAnswer() {
+  if (state.busy || !state.incompleteContinuation) return false;
+  const continuation = state.incompleteContinuation;
+  state.incompleteContinuation = null;
+  state.busy = true;
+  try {
+    const llm = createLLM(store.getSettings());
+    if (!llm.ready) throw new Error(llm.error || 'Add a provider API key in Settings to continue the answer.');
+    send('llm:start', { userBubble: null, small: continuation.small });
+    const result = await llm.stream({
+      system: continuation.system,
+      turns: [{ role: 'user', text: `${continuation.prompt}\n\nContinue the answer immediately after the text below. Do not repeat, restart, or add a preamble.\n\nAnswer so far:\n${continuation.text}` }],
+      onToken: (text) => send('llm:token', { text })
+    });
+    if (isTruncatedFinishReason(result.finishReason)) {
+      state.incompleteContinuation = { ...continuation, text: continuation.text + result.text };
+      send('llm:incomplete', { message: 'The answer is still incomplete. Continue again if needed.' });
+    }
+    send('llm:done', {});
+    return true;
+  } catch (error) {
+    send('llm:error', { message: formatProviderError(error) });
+    return false;
   } finally {
     state.busy = false;
   }
@@ -293,6 +352,7 @@ ipcMain.handle('history:clear', (event) => {
   return true;
 });
 ipcMain.handle('usage:get', (event) => isTrustedRenderer(event) ? { requests: state.requests, freeTierOnly: store.getSettings().freeTierOnly } : null);
+ipcMain.handle('answer:continue', (event) => isTrustedRenderer(event) ? continueIncompleteAnswer() : false);
 ipcMain.handle('clipboard:read', (event) => isTrustedRenderer(event) ? clipboard.readText() : '');
 ipcMain.handle('clipboard:write', (event, text) => {
   if (!isTrustedRenderer(event)) return false;

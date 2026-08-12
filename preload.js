@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('cue', {
   captureState: () => ipcRenderer.invoke('capture:state'),
   quit: () => ipcRenderer.invoke('app:quit'),
   historyClear: () => ipcRenderer.invoke('history:clear'),
+  conversationEnd: () => ipcRenderer.invoke('conversation:end'),
   answerContinue: () => ipcRenderer.invoke('answer:continue'),
   usageGet: () => ipcRenderer.invoke('usage:get'),
   clipboardRead: () => ipcRenderer.invoke('clipboard:read'),

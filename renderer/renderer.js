@@ -476,6 +476,12 @@
   $('#clear-history').addEventListener('click', async () => {
     if (await cue.historyClear()) { clearMessages(); showStatus('Conversation history cleared.'); }
   });
+  $('#end-conversation').addEventListener('click', async () => {
+    if (await cue.conversationEnd()) {
+      clearMessages();
+      showStatus('Conversation ended. Listening stopped and the current transcript was cleared.');
+    }
+  });
   $('#clear-personalization').addEventListener('click', async () => {
     profile = await cue.profileClear();
     resumeName = '';

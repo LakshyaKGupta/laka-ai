@@ -229,3 +229,25 @@
 ### Verification
 - `npm test` passed: 32 tests.
 - `node --check main.js`, `node --check renderer/renderer.js`, and `node --check src/prompts.js` passed.
+
+## Session Update - 2026-08-12 (end conversation control)
+
+### Objective
+- Provide one clear action to stop an active conversation safely.
+
+### Completed
+- Added **End conversation** in Settings. It stops audio capture, clears current transcript/assistant context and pending audio buffers, and removes the visible session messages.
+- Kept **Clear conversation history** as the history-only action and **Remove saved personalization** as the separate profile/resume removal action.
+
+### Files Modified
+- `main.js`, `preload.js`, `renderer/index.html`, `renderer/renderer.js`, `src/conversation.js`, `test/conversation.test.js`, `HANDOFF.md`
+
+### Architecture Decisions
+- Conversation clearing is a small shared helper used by both history clearing and the full end-conversation path, preventing drift between the two actions.
+
+### Dependencies Added
+- None.
+
+### Verification
+- `npm test` passed: 33 tests.
+- `node --check main.js`, `node --check preload.js`, and `node --check renderer/renderer.js` passed.

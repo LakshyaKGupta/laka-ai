@@ -9,6 +9,7 @@ const { createLLM, formatProviderError, getFeatureMaxTokens, isTruncatedFinishRe
 const { MODES, hasRemoteTranscript } = require('./src/prompts');
 const { rms16 } = require('./src/wav');
 const { takeAudioChunk } = require('./src/audio-buffer');
+const { clearConversation } = require('./src/conversation');
 const { extractResumeText } = require('./src/resume');
 const { boundedText, getSetupStatus, sanitizeAskPayload, sanitizeSettingsPatch, toPcmBuffer } = require('./src/validators');
 
@@ -373,9 +374,15 @@ ipcMain.handle('app:quit', (event) => {
 });
 ipcMain.handle('history:clear', (event) => {
   if (!isTrustedRenderer(event)) return false;
-  transcript.length = 0;
+  clearConversation({ transcript, buffers, bufferBytes });
   persistTranscriptHistory();
-  buffers.you = []; buffers.them = []; bufferBytes.you = 0; bufferBytes.them = 0;
+  return true;
+});
+ipcMain.handle('conversation:end', (event) => {
+  if (!isTrustedRenderer(event)) return false;
+  setCapturing(false);
+  clearConversation({ transcript, buffers, bufferBytes });
+  persistTranscriptHistory();
   return true;
 });
 ipcMain.handle('usage:get', (event) => isTrustedRenderer(event) ? { requests: state.requests, freeTierOnly: store.getSettings().freeTierOnly } : null);

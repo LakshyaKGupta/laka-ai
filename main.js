@@ -10,6 +10,7 @@ const { MODES, hasRemoteTranscript } = require('./src/prompts');
 const { rms16 } = require('./src/wav');
 const { takeAudioChunk } = require('./src/audio-buffer');
 const { clearConversation } = require('./src/conversation');
+const { waitForCompletion } = require('./src/fresh-audio');
 const { extractResumeText } = require('./src/resume');
 const { boundedText, getSetupStatus, sanitizeAskPayload, sanitizeSettingsPatch, toPcmBuffer } = require('./src/validators');
 
@@ -177,9 +178,9 @@ function stopFlushLoop() { if (flushTimer) { clearInterval(flushTimer); flushTim
 
 async function flushPendingAudio() {
   const pending = ['you', 'them'].filter((channel) => bufferBytes[channel] >= MIN_BYTES && !state.transcribing[channel]);
-  if (!pending.length) return;
+  if (!pending.length) return true;
   send('status', { message: 'Transcribing the latest audio…' });
-  await Promise.all(pending.map((channel) => flushChannel(channel)));
+  return waitForCompletion(Promise.all(pending.map((channel) => flushChannel(channel))), 900);
 }
 
 // -------- capture toggle --------

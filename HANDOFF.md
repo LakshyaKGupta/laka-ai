@@ -274,3 +274,26 @@
 ### Verification
 - `npm test` passed: 34 tests.
 - `node --check renderer/renderer.js` and `node --check src/prompts.js` passed.
+
+## Session Update - 2026-08-12 (v2.1.2 fast voice action)
+
+### Objective
+- Reduce avoidable answer delay and place End conversation beside the Listen control.
+
+### Completed
+- Added a 900 ms maximum wait for a pending transcription before a voice reply. If it completes in time, the newest audio is used; otherwise the model starts immediately from the latest completed transcript while transcription continues.
+- Moved **End conversation** to the top toolbar beside the Listen control, with a distinct red stop icon.
+- Versioned the app as `2.1.2` for an unambiguous package update.
+
+### Files Modified
+- `package.json`, `package-lock.json`, `main.js`, `renderer/index.html`, `renderer/renderer.js`, `renderer/styles.css`, `src/fresh-audio.js`, `test/fresh-audio.test.js`, `HANDOFF.md`
+
+### Architecture Decisions
+- The fresh-audio deadline preserves a fast response path without cancelling the audio worker or accepting an unbounded transcription wait. Provider/network first-token time remains externally determined and is displayed in local diagnostics.
+
+### Dependencies Added
+- None.
+
+### Verification
+- `npm test` passed: 36 tests.
+- `node --check main.js`, `node --check renderer/renderer.js`, and `node --check src/fresh-audio.js` passed.

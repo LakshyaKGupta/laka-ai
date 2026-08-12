@@ -297,3 +297,26 @@
 ### Verification
 - `npm test` passed: 36 tests.
 - `node --check main.js`, `node --check renderer/renderer.js`, and `node --check src/fresh-audio.js` passed.
+
+## Session Update - 2026-08-12 (v2.1.3 faster Assist)
+
+### Objective
+- Reduce Assist latency while preserving screen-grounded responses.
+
+### Completed
+- Capped screen-capture thumbnails at a 1,440px longest edge, avoiding full Retina PNG capture/upload overhead.
+- Tuned Assist output to 450 Fast / 800 Smart tokens; Ask retains its larger complete-answer budget.
+- Versioned the app as `2.1.3` for a distinct distributable package.
+
+### Files Modified
+- `package.json`, `package-lock.json`, `src/screen.js`, `src/screen-size.js`, `src/llm.js`, `test/screen-size.test.js`, `test/response-budget.test.js`, `HANDOFF.md`
+
+### Architecture Decisions
+- The 1,440px cap preserves enough visual detail for ordinary UI/code/document assistance while reducing image transfer and multimodal provider processing. External provider/network latency remains visible in Diagnostics as first-token and screenshot timing.
+
+### Dependencies Added
+- None.
+
+### Verification
+- `npm test` passed: 38 tests.
+- `node --check src/screen.js`, `node --check src/screen-size.js`, and `node --check src/llm.js` passed.

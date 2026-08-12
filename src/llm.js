@@ -126,6 +126,7 @@ function getDefaultMaxTokens(settings) {
 
 function getFeatureMaxTokens(settings, { mode, small }) {
   if (small || mode === 'say') return settings.smart ? 360 : 260;
+  if (mode === 'assist') return settings.smart ? 800 : 450;
   return settings.smart ? 1000 : 600;
 }
 

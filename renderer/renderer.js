@@ -22,7 +22,7 @@
   let settings = null;
   let busy = false;
   let aiEl = null;       // current streaming <div class="ai-text">
-  let apiKeyInputs = { openai: '', anthropic: '', gemini: '', groq: '', nvidia: '' };
+  let apiKeyInputs = { openai: '', anthropic: '', gemini: '', groq: '', openrouter: '', nvidia: '' };
   let caretEl = null;
   let usage = { requests: 0, freeTierOnly: true };
   const diagnostics = [];
@@ -335,6 +335,9 @@
   cue.on('transcription:update', ({ channel, provider, durationMs, latencyMs, outcome }) => {
     recordDiagnostic(`${channel === 'you' ? 'Microphone' : 'Meeting'} STT · ${provider} · ${outcome} · ${(durationMs / 1000).toFixed(1)}s audio / ${(latencyMs / 1000).toFixed(1)}s`);
   });
+  cue.on('window:state', ({ type, visible, focused, alwaysOnTop }) => {
+    recordDiagnostic(`Laka AI window ${type} · ${visible ? 'visible' : 'hidden'} · ${focused ? 'focused' : 'not focused'} · ${alwaysOnTop ? 'topmost' : 'normal'}`);
+  });
   let statusTimer = null;
   function showStatus(message) {
     let el = document.getElementById('cue-status');
@@ -382,7 +385,7 @@
       field.dataset.defaultPlaceholder = field.dataset.defaultPlaceholder || field.placeholder;
       field.placeholder = settings.apiKeyConfigured[provider] ? 'Configured — enter a new key to replace' : field.dataset.defaultPlaceholder;
     };
-    ['openai', 'anthropic', 'gemini', 'groq', 'nvidia'].forEach(setKeyInput);
+    ['openai', 'anthropic', 'gemini', 'groq', 'openrouter', 'nvidia'].forEach(setKeyInput);
     const m = settings.models[settings.provider] || { fast: '', smart: '' };
     $('#model-fast').value = m.fast; $('#model-smart').value = m.smart;
     $('#free-tier-only').checked = !!settings.freeTierOnly;
@@ -402,7 +405,7 @@
   }
   function statusText() {
     const k = settings.apiKeyConfigured;
-    const has = [k.openai && 'OpenAI', k.anthropic && 'Anthropic', k.gemini && 'Gemini', k.groq && 'Groq', k.nvidia && 'Nvidia'].filter(Boolean);
+    const has = [k.openai && 'OpenAI', k.anthropic && 'Anthropic', k.gemini && 'Gemini', k.groq && 'Groq', k.openrouter && 'OpenRouter', k.nvidia && 'Nvidia'].filter(Boolean);
     const stt = k.groq ? 'Groq Whisper' : (k.openai ? 'Whisper' : (k.gemini ? 'Gemini' : 'Faster-Whisper'));
     return 'Active: ' + settings.provider + ' · keys: ' + (has.join(', ') || 'none set') + ' · transcription: ' + stt;
   }
@@ -423,7 +426,7 @@
   }));
   async function saveSettings() {
     const apiKeys = {};
-    ['openai', 'anthropic', 'gemini', 'groq', 'nvidia'].forEach((provider) => {
+    ['openai', 'anthropic', 'gemini', 'groq', 'openrouter', 'nvidia'].forEach((provider) => {
       const field = $('#key-' + provider);
       const value = field.value.trim();
       apiKeyInputs[provider] = value;

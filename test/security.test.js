@@ -12,8 +12,8 @@ test('rejects unknown modes and oversized audio', () => {
 });
 
 test('only allows supported settings fields and non-empty replacement keys', () => {
-  assert.deepEqual(sanitizeSettingsPatch({ provider: 'groq', smart: true, onboarded: true, apiKeys: { groq: 'key' }, meetingAudioDeviceId: 'BlackHole-2ch', speechLanguage: 'hi', ignored: true }), {
-    provider: 'groq', smart: true, onboarded: true, apiKeys: { groq: 'key' }, meetingAudioDeviceId: 'BlackHole-2ch', speechLanguage: 'hi'
+  assert.deepEqual(sanitizeSettingsPatch({ provider: 'openrouter', smart: true, onboarded: true, apiKeys: { openrouter: 'key' }, meetingAudioDeviceId: 'BlackHole-2ch', speechLanguage: 'hi', ignored: true }), {
+    provider: 'openrouter', smart: true, onboarded: true, apiKeys: { openrouter: 'key' }, meetingAudioDeviceId: 'BlackHole-2ch', speechLanguage: 'hi'
   });
 });
 

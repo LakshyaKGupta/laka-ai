@@ -27,7 +27,7 @@ contextBridge.exposeInMainWorld('cue', {
   requestPermissions: () => ipcRenderer.invoke('permissions:request'),
   log: (msg) => ipcRenderer.send('log', msg),
   on: (channel, cb) => {
-    const allowed = ['capture:state', 'llm:start', 'llm:token', 'llm:done', 'llm:error', 'llm:incomplete', 'status', 'transcript', 'transcription:update', 'usage:update'];
+    const allowed = ['capture:state', 'llm:start', 'llm:token', 'llm:done', 'llm:error', 'llm:incomplete', 'status', 'transcript', 'transcription:update', 'usage:update', 'window:state'];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => cb(data));
   }

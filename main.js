@@ -1,6 +1,7 @@
 const DEBUG = false; // Set to false to disable debug logging
 const { app, BrowserWindow, dialog, ipcMain, globalShortcut, screen, session, desktopCapturer, shell, clipboard } = require('electron');
 const path = require('path');
+const { getWindowDiagnostic } = require('./src/window-diagnostics');
 const store = require('./src/store');
 const { captureScreenshot } = require('./src/screen');
 const { createSTT } = require('./src/stt');
@@ -89,12 +90,19 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
+  const reportWindowState = (type) => {
+    const diagnostic = getWindowDiagnostic(type, win);
+    if (diagnostic) send('window:state', diagnostic);
+  };
+  ['focus', 'blur', 'show', 'hide'].forEach((type) => win.on(type, () => reportWindowState(type)));
+
   win.webContents.on('did-finish-load', () => {
     win.showInactive();
     if (process.platform === 'darwin') {
       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       if (typeof win.setHiddenInMissionControl === 'function') win.setHiddenInMissionControl(true);
     }
+    reportWindowState('ready');
   });
   win.webContents.on('render-process-gone', (_e, d) => console.log('[laka-ai] renderer gone', JSON.stringify(d)));
 }

@@ -4,7 +4,7 @@
 
 **A local AI assistant that can help with your screen, notes, and permitted conversations.**
 
-A local desktop assistant. Bring your own AI key (Groq · Google Gemini · OpenAI · Anthropic).
+A local desktop assistant. Bring your own AI key (Gemini · Groq · OpenRouter · OpenAI · Anthropic).
 
 <img src="docs/tutorial.png" width="620" alt="Laka AI first-run tutorial" />
 
@@ -79,8 +79,11 @@ Laka AI uses **your own** API key. Click the **`...`** button in the input box (
 | **Anthropic (Claude)** | [console.anthropic.com](https://console.anthropic.com) | Great for screen & coding help. Claude has no speech-to-text, so add an OpenAI or Gemini key too if you want the listening features. |
 | **Google Gemini** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Recommended starting point: one key does chat + transcription, with a limited free tier. |
 | **Groq** | [console.groq.com/keys](https://console.groq.com/keys) | Recommended free alternative: fast Llama responses plus Whisper transcription. Free limits still apply. |
+| **OpenRouter** | [openrouter.ai/keys](https://openrouter.ai/keys) | Text-only quota fallback. Set the default `openrouter/free` model to let OpenRouter choose an available free model; availability and limits can change. |
 
 Your API keys are encrypted with macOS Keychain and the settings file retains only encrypted ciphertext. They are sent only to the provider you choose. Laka AI has no server and collects nothing.
+
+When a provider returns a temporary quota/rate-limit error, Laka AI tries configured providers in this order: selected provider, Gemini, Groq, OpenRouter, then any configured paid provider. OpenRouter does not provide speech-to-text, so Groq Whisper and the existing local Faster-Whisper fallback remain the voice options.
 
 ### Speech-to-text and accuracy
 

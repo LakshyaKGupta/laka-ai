@@ -135,3 +135,42 @@
 - `node --check main.js`, `node --check preload.js`, and `node --check renderer/renderer.js` passed.
 - `npm audit --omit=dev --audit-level=high` found 0 production vulnerabilities.
 - `npm run pack` completed with ASAR enabled; signing/notarization was skipped because Apple credentials are not configured locally.
+
+## Session Update - 2026-08-12 (v2.1 free fallback and self diagnostics)
+
+### Objective
+- Add a free text fallback after Gemini and Groq, validate the app's own overlay lifecycle safely, and prepare a macOS build.
+
+### Completed
+- Added OpenRouter as a Keychain-backed, text-only provider. Its default `openrouter/free` model is eligible for Free-tier-only mode and is tried after Gemini and Groq when they return an error.
+- Added Settings controls, status visibility, model defaults, validation, provider-chain tests, and user-facing quota recovery guidance for OpenRouter.
+- Added local-only Laka AI window diagnostics: ready/focus/blur/show/hide, visible state, own focus state, and own always-on-top state. It deliberately does not inspect, suppress, or alter other applications' focus/monitoring behavior.
+- Bumped the app to `2.1.0` and created `dist/Laka AI v2.1.zip` from the Apple Silicon `.app`.
+
+### Files Modified
+- `package.json`, `package-lock.json`, `README.md`, `HANDOFF.md`
+- `main.js`, `preload.js`, `renderer/index.html`, `renderer/renderer.js`
+- `src/llm.js`, `src/store.js`, `src/validators.js`, `src/window-diagnostics.js`
+- `test/providers.test.js`, `test/security.test.js`, `test/window-diagnostics.test.js`
+
+### Architecture Decisions
+- OpenRouter uses the existing OpenAI-compatible SDK and Keychain persistence path; no dependency or plaintext key store was added.
+- It is intentionally text-only because `openrouter/free` routes to an available free model whose capability can vary. Voice continues through Groq/OpenAI/Gemini/Faster-Whisper.
+- Window telemetry only describes Laka AI's own state and is emitted over the existing allow-listed IPC channel.
+
+### Dependencies Added
+- None.
+
+### Verification
+- `npm test` passed: 28 tests.
+- `node --check main.js`, `node --check preload.js`, `node --check renderer/renderer.js`, and `node --check src/llm.js` passed.
+- `npm audit --omit=dev --audit-level=high` found 0 vulnerabilities.
+- `npm run pack` completed for macOS arm64 with ASAR enabled.
+- `unzip -t 'dist/Laka AI v2.1.zip'` reported no compressed-data errors.
+
+### Issues Found
+- The packaged build is unsigned and not notarized because no Developer ID identity or Apple notarization credentials are available. Do not represent it as a signed GitHub Release until those credentials are configured.
+
+### Pending Work
+- Add a user-owned OpenRouter key in Settings and make a live permitted text request to validate the provider externally; automated tests cover configuration and fallback ordering but do not consume API quotas.
+- Configure the Apple signing and notarization secrets from `docs/RELEASE.md` before pushing a version tag that triggers the release workflow.

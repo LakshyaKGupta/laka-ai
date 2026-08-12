@@ -1,4 +1,4 @@
-const PROVIDERS = new Set(['openai', 'anthropic', 'gemini', 'groq', 'nvidia']);
+const PROVIDERS = new Set(['openai', 'anthropic', 'gemini', 'groq', 'openrouter', 'nvidia']);
 const MODES = new Set(['assist', 'say', 'followup', 'recap', 'ask', 'leetcode']);
 const MAX_TEXT_LENGTH = 12_000;
 const MAX_PCM_BYTES = 1_048_576;

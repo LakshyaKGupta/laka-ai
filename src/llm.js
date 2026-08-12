@@ -145,6 +145,7 @@ function getProviderCandidates(settings) {
   push(selectedProvider);
   if (selectedProvider !== 'gemini') push('gemini');
   if (selectedProvider !== 'groq') push('groq');
+  if (selectedProvider !== 'openrouter') push('openrouter');
   if (selectedProvider !== 'openai') push('openai');
   if (selectedProvider !== 'anthropic') push('anthropic');
   if (selectedProvider !== 'nvidia') push('nvidia');
@@ -158,7 +159,8 @@ function createLLM(settings) {
   const maxTokens = getDefaultMaxTokens(settings);
   const freeTierModels = {
     gemini: new Set(['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview']),
-    groq: new Set(['llama-3.1-8b-instant', 'llama-3.3-70b-versatile'])
+    groq: new Set(['llama-3.1-8b-instant', 'llama-3.3-70b-versatile']),
+    openrouter: new Set(['openrouter/free'])
   };
   const candidates = getProviderCandidates(settings);
   const primary = candidates.find((entry) => entry.provider === provider) || candidates[0] || null;
@@ -170,9 +172,9 @@ function createLLM(settings) {
 
   return {
     provider, model, apiKey,
-    supportsImages: primary ? primary.provider !== 'groq' : false,
+    supportsImages: primary ? !['groq', 'openrouter'].includes(primary.provider) : false,
     ready: Boolean(primary) && !freeTierBlocked,
-    error: freeTierBlocked ? 'Free-tier only is enabled. Select Gemini or Groq with a supported free-tier model.' : (!primary ? 'Add a provider API key in Settings before asking Laka AI for help.' : ''),
+    error: freeTierBlocked ? 'Free-tier only is enabled. Select Gemini, Groq, or OpenRouter with a supported free-tier model.' : (!primary ? 'Add a provider API key in Settings before asking Laka AI for help.' : ''),
     async stream(params) {
       if (DEBUG) console.log('[DEBUG LLM] stream() invoked for provider:', provider);
       let lastError = null;
@@ -182,6 +184,7 @@ function createLLM(settings) {
           let result;
           if (candidate.provider === 'openai') result = await streamOpenAI(args);
           else if (candidate.provider === 'groq') result = await streamOpenAI({ ...args, baseURL: 'https://api.groq.com/openai/v1', supportsImages: false });
+          else if (candidate.provider === 'openrouter') result = await streamOpenAI({ ...args, baseURL: 'https://openrouter.ai/api/v1', supportsImages: false });
           else if (candidate.provider === 'nvidia') result = await streamOpenAI({ ...args, baseURL: 'https://integrate.api.nvidia.com/v1' });
           else if (candidate.provider === 'anthropic') result = await streamAnthropic(args);
           else if (candidate.provider === 'gemini') result = await streamGemini(args);
@@ -203,7 +206,7 @@ function formatProviderError(error) {
   if ((error && (error.status === 429 || error.code === 429)) || /quota|rate limit|resource_exhausted/i.test(message)) {
     const provider = error && error.lakaProvider ? error.lakaProvider : 'gemini';
     const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
-    return `${providerName} free-tier limit reached${retry ? `. Retry in ${Math.ceil(Number(retry[1]))} seconds` : ''}. Add a Groq key in Settings for automatic fallback, or wait for the quota window.`;
+    return `${providerName} free-tier limit reached${retry ? `. Retry in ${Math.ceil(Number(retry[1]))} seconds` : ''}. Laka AI will try configured fallbacks. Add Groq or OpenRouter in Settings for another free option, or wait for the quota window.`;
   }
   return message.slice(0, 600);
 }

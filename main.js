@@ -11,6 +11,7 @@ const { rms16 } = require('./src/wav');
 const { takeAudioChunk } = require('./src/audio-buffer');
 const { clearConversation } = require('./src/conversation');
 const { waitForCompletion } = require('./src/fresh-audio');
+const { getCooldownMs, getEarliestRetryMs } = require('./src/provider-cooldown');
 const { extractResumeText } = require('./src/resume');
 const { boundedText, getSetupStatus, sanitizeAskPayload, sanitizeSettingsPatch, toPcmBuffer } = require('./src/validators');
 
@@ -23,6 +24,7 @@ const buffers = { you: [], them: [] };
 const bufferBytes = { you: 0, them: 0 };
 const transcript = []; // { channel, text, ts }
 const context = { resumeText: '', resumeName: '', company: '', role: '', responsibilities: '' };
+const providerCooldowns = {};
 
 function loadTranscriptHistory() {
   const history = store.getHistory() || [];
@@ -32,6 +34,10 @@ function loadTranscriptHistory() {
 
 function persistTranscriptHistory() {
   store.setHistory(transcript.slice(-200));
+}
+function recordProviderCooldown(provider, error) {
+  const cooldownMs = getCooldownMs(error);
+  if (cooldownMs) providerCooldowns[provider] = Date.now() + cooldownMs;
 }
 const FLUSH_MS = 2200;
 const MIN_BYTES = Math.floor(16000 * 2 * 0.6); // ~0.6s
@@ -263,6 +269,16 @@ async function runFeature(mode, userText) {
       }
     }
 
+    const requiresImages = Boolean(imageDataUrl);
+    const availableCandidates = llm.getCandidates({ requiresImages, blockedProviders: providerCooldowns });
+    if (!availableCandidates.length) {
+      const retryMs = getEarliestRetryMs(providerCooldowns);
+      const message = retryMs ? `All configured providers are temporarily rate-limited. Retry in ${Math.ceil(retryMs / 1000)} seconds or add Groq/OpenRouter in Settings.` : 'No configured provider can handle this request.';
+      send('llm:error', { message });
+      send('status', { message });
+      return;
+    }
+
     const built = def.build({ transcript, userText: userText || '', ...context });
     if (DEBUG) console.log('[DEBUG MAIN] Built prompt. Starting LLM stream...');
     let firstTokenAt = 0;
@@ -270,7 +286,9 @@ async function runFeature(mode, userText) {
       system: def.system,
       turns: [{ role: 'user', text: built }],
       imageDataUrl,
-      requiresImages: Boolean(imageDataUrl),
+      requiresImages,
+      blockedProviders: providerCooldowns,
+      onProviderError: recordProviderCooldown,
       maxTokens: getFeatureMaxTokens(settings, { mode, small: !!def.small }),
       onToken: (t) => {
         if (!firstTokenAt) firstTokenAt = Date.now();
@@ -288,7 +306,9 @@ async function runFeature(mode, userText) {
           system: def.system,
           turns: [{ role: 'user', text: `${built}\n\nContinue the answer immediately after the text below. Do not repeat, restart, or add a preamble.\n\nAnswer so far:\n${fullText}` }],
           maxTokens: getFeatureMaxTokens(settings, { mode, small: !!def.small }),
-          requiresImages: Boolean(imageDataUrl),
+          requiresImages,
+          blockedProviders: providerCooldowns,
+          onProviderError: recordProviderCooldown,
           onToken: (t) => {
             if (!firstTokenAt) firstTokenAt = Date.now();
             send('llm:token', { text: t });

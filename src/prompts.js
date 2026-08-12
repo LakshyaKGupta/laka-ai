@@ -42,7 +42,7 @@ const MODES = {
       'Look at the screenshot and the recent conversation, decide what the user needs RIGHT NOW, and deliver it directly with no preamble. ' +
       'If the screen shows a coding/LeetCode problem: give a short approach, then a correct solution in a fenced code block, then time and space complexity. ' +
       'If it is a conversation: answer the current question or say exactly what the user should say next, in the first person. ' +
-      'Give one self-contained, complete final answer. Do not guess when the screenshot is missing or unreadable; ask one specific clarification instead. Never introduce yourself, describe a plan, say "I should say", or repeat the prompt.',
+      'For coding questions, first verify the exact inputs, constraints, and required output from the screenshot, then provide a complete correct solution. Do not give generic optimization advice or say that code "seems mostly correct". Do not guess when the screenshot is missing or unreadable; ask one specific clarification instead. Never introduce yourself, describe a plan, say "I should say", or repeat the prompt.',
     build(ctx) {
       const t = formatTranscript(ctx.transcript, 12);
       return 'Recent conversation:\n' + (t || '(none)') + '\n\nRespond with what I need right now.' + buildContextBlock(ctx);

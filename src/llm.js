@@ -186,7 +186,10 @@ function createLLM(settings) {
     ready: Boolean(primary) && !freeTierBlocked,
     error: freeTierBlocked ? 'Free-tier only is enabled. Select Gemini, Groq, or OpenRouter with a supported free-tier model.' : (!primary ? 'Add a provider API key in Settings before asking Laka AI for help.' : ''),
     getCandidates(params = {}) {
-      return params.requiresImages ? candidates.filter((candidate) => candidate.supportsImages) : candidates;
+      return candidates.filter((candidate) => {
+        if (params.requiresImages && !candidate.supportsImages) return false;
+        return !(params.blockedProviders && params.blockedProviders[candidate.provider] > Date.now());
+      });
     },
     async stream(params) {
       if (DEBUG) console.log('[DEBUG LLM] stream() invoked for provider:', provider);
@@ -206,6 +209,7 @@ function createLLM(settings) {
           return { ...result, provider: candidate.provider, model: candidate.model, attempts: streamCandidates.indexOf(candidate) + 1 };
         } catch (error) {
           if (error && typeof error === 'object') error.lakaProvider = candidate.provider;
+          if (typeof params.onProviderError === 'function') params.onProviderError(candidate.provider, error);
           lastError = error;
         }
       }

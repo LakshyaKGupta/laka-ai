@@ -344,3 +344,27 @@
 ### Verification
 - `npm test` passed: 40 tests.
 - `node --check main.js`, `node --check src/llm.js`, and `node --check src/prompts.js` passed.
+
+## Session Update - 2026-08-12 (v2.1.5 quota cooldown and coding accuracy)
+
+### Objective
+- Stop repeated Gemini quota calls and prevent generic, incorrect coding Assist answers.
+
+### Completed
+- Added an in-session cooldown for a provider that returns HTTP 429. Laka AI honors its stated retry time (or a bounded 60-second fallback) and skips that provider on later requests, immediately attempting configured alternatives.
+- Added a clear all-providers-cooling-down message with the earliest retry time instead of repeatedly spending free-tier requests.
+- Made coding Assist explicitly verify screenshot inputs/constraints/output and reject generic optimization advice or vague code reviews.
+
+### Files Modified
+- `package.json`, `package-lock.json`, `main.js`, `src/llm.js`, `src/prompts.js`, `src/provider-cooldown.js`, `test/provider-cooldown.test.js`, `test/providers.test.js`, `test/performance.test.js`, `HANDOFF.md`
+
+### Architecture Decisions
+- Cooldowns are intentionally session-local and contain only provider names plus retry timestamps—never keys, transcript content, or external telemetry.
+- Text-only Groq/OpenRouter can keep text and voice workflows available during a Gemini cooldown but cannot replace a vision model for screen Assist.
+
+### Dependencies Added
+- None.
+
+### Verification
+- `npm test` passed: 45 tests.
+- `node --check main.js`, `node --check src/llm.js`, `node --check src/provider-cooldown.js`, and `node --check src/prompts.js` passed.

@@ -70,3 +70,12 @@ test('keeps screen Assist on a vision-capable provider instead of a text-only fa
   assert.equal(llm.supportsImages, true);
   assert.equal(llm.getCandidates({ requiresImages: true }).map((entry) => entry.provider).join(','), 'openai');
 });
+
+test('skips a provider that is cooling down after a quota failure', () => {
+  const llm = createLLM({
+    provider: 'gemini', smart: false, freeTierOnly: false,
+    apiKeys: { gemini: 'g', groq: 'r' },
+    models: { gemini: { fast: 'gemini-2.0-flash-lite' }, groq: { fast: 'llama-3.1-8b-instant' } }
+  });
+  assert.deepEqual(llm.getCandidates({ blockedProviders: { gemini: Date.now() + 10_000 } }).map((entry) => entry.provider), ['groq']);
+});

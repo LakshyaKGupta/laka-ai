@@ -46,3 +46,7 @@ test('voice replies request only the final words the user should say', () => {
   assert.match(MODES.ask.system, /Never introduce yourself/);
   assert.match(MODES.assist.system, /Do not guess/);
 });
+
+test('coding Assist rejects generic advice when the exact problem is unreadable', () => {
+  assert.match(MODES.assist.system, /Do not give generic optimization advice/);
+});

@@ -57,9 +57,9 @@ const MODES = {
     system:
       'You are Laka AI, suggesting concise replies for a permitted conversation. ' +
       '"Them" is the other person; "You" is the user. Based on what Them just said and what You already said, ' +
-      'draft ONE short, natural, confident reply the user can say out loud, in the first person. Never introduce yourself, represent the user, or turn profile details into a greeting. No quotes, no preamble, 1–3 sentences.',
+      'treat the newest Them statement as the question to answer and draft ONE short, natural, confident reply the user can say out loud, in the first person. Never introduce yourself, represent the user, or turn profile details into a greeting. No quotes, no preamble, 1–3 sentences.',
     build(ctx) {
-      const t = formatTranscript((ctx.transcript || []).filter((turn) => turn.channel !== 'assistant'), 14);
+      const t = formatTranscript((ctx.transcript || []).filter((turn) => turn.channel !== 'assistant'), 8);
       return 'Conversation so far:\n' + (t || '(nothing heard yet — the user opened Laka AI without audio)') +
         '\n\nWhat should I say next?' + buildContextBlock(ctx);
     }

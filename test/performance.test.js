@@ -26,3 +26,17 @@ test('recognizes whether remote-speaker audio is available for a voice reply', (
   assert.equal(require('../src/prompts').hasRemoteTranscript([{ channel: 'assistant', text: 'Previous reply' }]), false);
   assert.equal(require('../src/prompts').hasRemoteTranscript([{ channel: 'them', text: 'Question' }]), true);
 });
+
+test('keeps voice replies focused on the newest captured conversation turns', () => {
+  const prompt = MODES.say.build({
+    transcript: [
+      { channel: 'them', text: 'old-one' }, { channel: 'you', text: 'old-two' },
+      { channel: 'them', text: 'old-three' }, { channel: 'you', text: 'old-four' },
+      { channel: 'them', text: 'old-five' }, { channel: 'you', text: 'old-six' },
+      { channel: 'them', text: 'old-seven' }, { channel: 'you', text: 'old-eight' },
+      { channel: 'them', text: 'What measurable product outcome did you improve?' }
+    ]
+  });
+  assert.doesNotMatch(prompt, /old-one/);
+  assert.match(prompt, /What measurable product outcome did you improve\?/);
+});

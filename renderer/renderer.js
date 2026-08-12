@@ -14,6 +14,7 @@
   document.querySelector('.act[data-mode="say"] .ic').innerHTML = icon('wand-sparkles', { size: 16 });
   document.querySelector('.act[data-mode="followup"] .ic').innerHTML = icon('message-circle', { size: 16 });
   document.querySelector('.act[data-mode="recap"] .ic').innerHTML = icon('refresh-cw', { size: 16 });
+  $('#end-conversation .ic').innerHTML = icon('stop-square', { size: 16 });
   $('#smart-toggle .ic').innerHTML = icon('zap', { size: 14 });
   $('#more-btn').innerHTML = icon('more-horizontal', { size: 18 });
   $('#send-btn').innerHTML = icon('play', { size: 15 });
@@ -476,12 +477,14 @@
   $('#clear-history').addEventListener('click', async () => {
     if (await cue.historyClear()) { clearMessages(); showStatus('Conversation history cleared.'); }
   });
-  $('#end-conversation').addEventListener('click', async () => {
+  async function endConversation() {
     if (await cue.conversationEnd()) {
       clearMessages();
       showStatus('Conversation ended. Listening stopped and the current transcript was cleared.');
     }
-  });
+  }
+  $('#end-conversation').addEventListener('click', endConversation);
+  $('#end-conversation-settings').addEventListener('click', endConversation);
   $('#clear-personalization').addEventListener('click', async () => {
     profile = await cue.profileClear();
     resumeName = '';

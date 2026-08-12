@@ -251,3 +251,26 @@
 ### Verification
 - `npm test` passed: 33 tests.
 - `node --check main.js`, `node --check preload.js`, and `node --check renderer/renderer.js` passed.
+
+## Session Update - 2026-08-12 (v2.1.1 visible end control and focused voice context)
+
+### Objective
+- Make the conversation-ending action visible without opening Settings, avoid stale app copies, and improve voice-answer relevance and latency.
+
+### Completed
+- Added a visible **End conversation** action in the main panel, while retaining the Settings control.
+- Reduced voice-reply context from 14 to the newest 8 captured turns and explicitly prioritize the newest remote-speaker statement.
+- Versioned the app as `2.1.1` so macOS shows a distinct updated build rather than a replacement that appears unchanged.
+
+### Files Modified
+- `package.json`, `package-lock.json`, `renderer/index.html`, `renderer/renderer.js`, `src/prompts.js`, `test/performance.test.js`, `HANDOFF.md`
+
+### Architecture Decisions
+- The latest complete remote statement is the strongest signal for a voice reply; bounding prior context improves both relevance and provider latency.
+
+### Dependencies Added
+- None.
+
+### Verification
+- `npm test` passed: 34 tests.
+- `node --check renderer/renderer.js` and `node --check src/prompts.js` passed.

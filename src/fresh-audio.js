@@ -1,3 +1,5 @@
+const VOICE_REPLY_FLUSH_WAIT_MS = 350;
+
 function waitForCompletion(promise, timeoutMs) {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(false), timeoutMs);
@@ -8,4 +10,4 @@ function waitForCompletion(promise, timeoutMs) {
   });
 }
 
-module.exports = { waitForCompletion };
+module.exports = { VOICE_REPLY_FLUSH_WAIT_MS, waitForCompletion };

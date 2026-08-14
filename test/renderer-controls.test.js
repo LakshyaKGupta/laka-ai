@@ -12,3 +12,8 @@ test('provides a microphone toggle beside the send button', () => {
   assert.match(html, /id="mic-toggle"[^>]*title="Start \/ stop listening"[\s\S]*id="send-btn"/);
   assert.match(renderer, /\$\('#mic-toggle'\)\.addEventListener\('click'/);
 });
+
+test('does not render a manual Continue answer control', () => {
+  assert.doesNotMatch(renderer, /Continue answer/);
+  assert.doesNotMatch(renderer, /llm:incomplete/);
+});

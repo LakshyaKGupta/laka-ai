@@ -314,22 +314,6 @@
     recordDiagnostic('Answer request failed');
     if (message) showStatus(message + (message.includes('Settings') ? '' : ' Open Settings with the gear icon to fix it.'));
   });
-  cue.on('llm:incomplete', ({ message }) => {
-    const button = document.createElement('button');
-    button.className = 's-secondary';
-    button.type = 'button';
-    button.textContent = 'Continue answer';
-    button.addEventListener('click', async () => {
-      button.disabled = true;
-      button.textContent = 'Continuing…';
-      const accepted = await cue.answerContinue();
-      if (!accepted) { button.disabled = false; button.textContent = 'Continue answer'; }
-    });
-    messages.appendChild(button);
-    showStatus(message);
-    recordDiagnostic('Answer needs continuation');
-    scrollMessagesToBottom();
-  });
   cue.on('transcript', ({ channel, text }) => {
     const bubble = document.createElement('div');
     bubble.className = 'transcript-bubble';

@@ -5,11 +5,11 @@ const { getThumbnailSize } = require('./screen-size');
 
 const MAX_SCREENSHOT_EDGE = 1600;
 
-async function captureScreenshot() {
+async function captureScreenshot(maxEdge = MAX_SCREENSHOT_EDGE) {
   const primary = screen.getPrimaryDisplay();
   const scale = primary.scaleFactor || 1;
   const { width, height } = primary.size;
-  const thumbnailSize = getThumbnailSize({ width: Math.floor(width * scale), height: Math.floor(height * scale) }, MAX_SCREENSHOT_EDGE);
+  const thumbnailSize = getThumbnailSize({ width: Math.floor(width * scale), height: Math.floor(height * scale) }, maxEdge);
   const sources = await desktopCapturer.getSources({
     types: ['screen'],
     thumbnailSize

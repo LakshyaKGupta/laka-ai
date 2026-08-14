@@ -6,13 +6,14 @@ const store = require('./src/store');
 const { captureScreenshot } = require('./src/screen');
 const { getScreenCaptureError } = require('./src/screen-request');
 const { createSTT } = require('./src/stt');
-const { createLLM, formatProviderError, getFeatureMaxTokens, isTruncatedFinishReason } = require('./src/llm');
+const { createLLM, formatProviderError, getFeatureMaxTokens } = require('./src/llm');
 const { MODES, hasRemoteTranscript } = require('./src/prompts');
 const { rms16 } = require('./src/wav');
 const { takeAudioChunk } = require('./src/audio-buffer');
 const { LIVE_AUDIO, retainNewestAudio } = require('./src/live-audio');
 const { clearConversation } = require('./src/conversation');
-const { waitForCompletion } = require('./src/fresh-audio');
+const { VOICE_REPLY_FLUSH_WAIT_MS, waitForCompletion } = require('./src/fresh-audio');
+const { shouldAutomaticallyContinue } = require('./src/continuation');
 const { getCooldownMs, getEarliestRetryMs } = require('./src/provider-cooldown');
 const { extractResumeText } = require('./src/resume');
 const { boundedText, getSetupStatus, sanitizeAskPayload, sanitizeSettingsPatch, toPcmBuffer } = require('./src/validators');
@@ -20,7 +21,7 @@ const { boundedText, getSetupStatus, sanitizeAskPayload, sanitizeSettingsPatch, 
 let win = null;
 
 // -------- capture / transcript state --------
-const state = { capturing: false, busy: false, requests: 0, transcribing: { you: false, them: false }, incompleteContinuation: null };
+const state = { capturing: false, busy: false, requests: 0, transcribing: { you: false, them: false } };
 let sttDisabled = false; // set when the key can't reach any speech model (stops retry spam)
 const buffers = { you: [], them: [] };
 const bufferBytes = { you: 0, them: 0 };
@@ -188,7 +189,7 @@ async function flushPendingAudio() {
   const pending = ['you', 'them'].filter((channel) => bufferBytes[channel] >= MIN_BYTES && !state.transcribing[channel]);
   if (!pending.length) return true;
   send('status', { message: 'Transcribing the latest audio…' });
-  return waitForCompletion(Promise.all(pending.map((channel) => flushChannel(channel))), 900);
+  return waitForCompletion(Promise.all(pending.map((channel) => flushChannel(channel))), VOICE_REPLY_FLUSH_WAIT_MS);
 }
 
 // -------- capture toggle --------
@@ -261,7 +262,7 @@ async function runFeature(mode, userText) {
       if (DEBUG) console.log('[DEBUG MAIN] Feature needs screen. Capturing screenshot...');
       try { 
         const screenshotStartedAt = Date.now();
-        imageDataUrl = await captureScreenshot();
+        imageDataUrl = await captureScreenshot(settings.smart ? 1600 : 1440);
         screenshotMs = Date.now() - screenshotStartedAt;
         if (DEBUG) console.log('[DEBUG MAIN] Screenshot captured successfully (length:', imageDataUrl.length, ')');
       }
@@ -307,8 +308,9 @@ async function runFeature(mode, userText) {
     let fullText = first.text;
     let completion = first.finishReason;
     let attempts = first.attempts;
-    let incompleteNotified = false;
-    if (isTruncatedFinishReason(completion)) {
+    let continuationCount = 0;
+    let continuationFailed = false;
+    while (shouldAutomaticallyContinue(completion, continuationCount)) {
       send('status', { message: 'Completing the answer…' });
       try {
         const continued = await llm.stream({
@@ -326,15 +328,15 @@ async function runFeature(mode, userText) {
         fullText += continued.text;
         completion = continued.finishReason;
         attempts += continued.attempts;
+        continuationCount += 1;
       } catch (error) {
-        state.incompleteContinuation = { system: def.system, prompt: built, text: fullText, small: !!def.small };
-        send('llm:incomplete', { message: 'The answer was cut short and could not be completed automatically. Continue when ready.' });
-        incompleteNotified = true;
+        continuationFailed = true;
+        send('status', { message: 'The provider could not finish the final section. The completed answer is shown.' });
+        break;
       }
     }
-    if (isTruncatedFinishReason(completion) && !incompleteNotified) {
-      state.incompleteContinuation = { system: def.system, prompt: built, text: fullText, small: !!def.small };
-      send('llm:incomplete', { message: 'The answer reached its limit. Select Continue to finish it.' });
+    if (!continuationFailed && shouldAutomaticallyContinue(completion, continuationCount)) {
+      send('status', { message: 'The provider reached its output limit. Ask a shorter, more focused follow-up if a final section is missing.' });
     }
     if (fullText && fullText.trim()) {
       transcript.push({ channel: 'assistant', text: fullText.trim(), ts: Date.now() });
@@ -351,34 +353,6 @@ async function runFeature(mode, userText) {
     send('llm:done', {});
   } catch (e) {
     send('llm:error', { message: formatProviderError(e) });
-  } finally {
-    state.busy = false;
-  }
-}
-
-async function continueIncompleteAnswer() {
-  if (state.busy || !state.incompleteContinuation) return false;
-  const continuation = state.incompleteContinuation;
-  state.incompleteContinuation = null;
-  state.busy = true;
-  try {
-    const llm = createLLM(store.getSettings());
-    if (!llm.ready) throw new Error(llm.error || 'Add a provider API key in Settings to continue the answer.');
-    send('llm:start', { userBubble: null, small: continuation.small });
-    const result = await llm.stream({
-      system: continuation.system,
-      turns: [{ role: 'user', text: `${continuation.prompt}\n\nContinue the answer immediately after the text below. Do not repeat, restart, or add a preamble.\n\nAnswer so far:\n${continuation.text}` }],
-      onToken: (text) => send('llm:token', { text })
-    });
-    if (isTruncatedFinishReason(result.finishReason)) {
-      state.incompleteContinuation = { ...continuation, text: continuation.text + result.text };
-      send('llm:incomplete', { message: 'The answer is still incomplete. Continue again if needed.' });
-    }
-    send('llm:done', {});
-    return true;
-  } catch (error) {
-    send('llm:error', { message: formatProviderError(error) });
-    return false;
   } finally {
     state.busy = false;
   }
@@ -425,7 +399,6 @@ ipcMain.handle('conversation:end', (event) => {
   return true;
 });
 ipcMain.handle('usage:get', (event) => isTrustedRenderer(event) ? { requests: state.requests, freeTierOnly: store.getSettings().freeTierOnly } : null);
-ipcMain.handle('answer:continue', (event) => isTrustedRenderer(event) ? continueIncompleteAnswer() : false);
 ipcMain.handle('clipboard:read', (event) => isTrustedRenderer(event) ? clipboard.readText() : '');
 ipcMain.handle('clipboard:write', (event, text) => {
   if (!isTrustedRenderer(event)) return false;

@@ -6,6 +6,15 @@ test('keeps a typed follow-up fast by not taking a new screenshot', () => {
   assert.equal(MODES.ask.needsScreen, false);
 });
 
+test('does not let stale conversation history override a standalone typed greeting', () => {
+  const prompt = MODES.ask.build({
+    userText: 'hi',
+    transcript: [{ channel: 'assistant', text: 'Finish the GTM scroll trigger and configure GA4.' }]
+  });
+  assert.match(prompt, /Current user message: hi/);
+  assert.doesNotMatch(prompt, /GTM scroll trigger/);
+});
+
 test('bounds conversation context to keep follow-up prompts responsive', () => {
   const turns = Array.from({ length: 40 }, () => ({ channel: 'them', text: 'x'.repeat(1000) }));
   assert.ok(formatTranscript(turns, 12).length <= 4000);

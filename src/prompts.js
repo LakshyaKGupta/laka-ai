@@ -10,6 +10,10 @@ function hasRemoteTranscript(turns) {
   return Array.isArray(turns) && turns.some((turn) => turn && turn.channel === 'them' && typeof turn.text === 'string' && turn.text.trim());
 }
 
+function isStandaloneChatMessage(text) {
+  return /^(?:h+i+|hello+|hey+|thanks?|thank you|ok(?:ay)?|bye+)[!?.\s]*$/i.test(String(text || '').trim());
+}
+
 function buildContextBlock(ctx) {
   const fields = [];
   if (ctx.resumeText) fields.push('Resume evidence (use only this evidence for candidate claims):\n' + ctx.resumeText.slice(0, 3500));
@@ -100,10 +104,12 @@ const MODES = {
     small: false,
     system:
       'You are Laka AI, a concise assistant grounded in the user\'s permitted conversation and profile context. ' +
-      'Answer the user\'s question directly, accurately, and completely in one self-contained final response. Favor evidence over guesses. Never introduce yourself, describe a plan, say "I should say", or repeat the answer. If key facts are missing, ask one concise clarification. No preamble.',
+      'The current user message is authoritative: never answer an old topic when the current message is a new standalone request. Answer the user\'s question directly, accurately, and completely in one self-contained final response. Favor evidence over guesses. Never introduce yourself, describe a plan, say "I should say", or repeat the answer. If key facts are missing, ask one concise clarification. No preamble.',
     build(ctx) {
-      const t = formatTranscript(ctx.transcript, 12);
-      return (t ? 'Recent conversation:\n' + t + '\n\n' : '') + 'Question: ' + ctx.userText + buildContextBlock(ctx);
+      const question = String(ctx.userText || '').trim();
+      const turns = (ctx.transcript || []).filter((turn) => !(turn && turn.channel === 'you' && String(turn.text || '').trim() === question));
+      const t = isStandaloneChatMessage(question) ? '' : formatTranscript(turns, 6);
+      return (t ? 'Recent conversation (only if relevant):\n' + t + '\n\n' : '') + 'Current user message: ' + question + buildContextBlock(ctx);
     }
   },
 
@@ -120,4 +126,4 @@ const MODES = {
   }
 };
 
-module.exports = { MODES, buildContextBlock, formatTranscript, formatStructuredReply, hasRemoteTranscript };
+module.exports = { MODES, buildContextBlock, formatTranscript, formatStructuredReply, hasRemoteTranscript, isStandaloneChatMessage };

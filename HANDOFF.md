@@ -440,3 +440,38 @@
 
 ### Pending Work
 - Conduct a permitted live microphone/meeting-audio test with a configured STT key; no automated test can access a real device or consume the user's provider quota.
+
+## Session Update - 2026-08-14 (v2.1.8 stale-chat correction and automatic completion)
+
+### Objective
+- Stop standalone typed messages from receiving stale conversation answers, remove the visible Continue button, and reduce answer latency across voice and Assist.
+
+### Completed
+- Standalone messages such as `hi`, `hello`, and `thanks` now omit old transcript context entirely. Other typed messages keep only six relevant prior turns and the current message is explicit and authoritative.
+- Removed the Continue button and its IPC surface. A token-limited answer now performs up to two automatic continuations behind the same streamed response; if the provider still cannot complete it, Laka AI shows a precise status rather than a manual action.
+- Reduced the maximum freshness wait before a voice reply from 900 ms to 350 ms.
+- Fast Assist now captures a 1,440px image; Smart Assist retains 1,600px for accuracy.
+
+### Files Modified
+- `main.js`, `preload.js`, `src/continuation.js`, `src/fresh-audio.js`, `src/prompts.js`, `src/screen.js`, `renderer/renderer.js`
+- `package.json`, `package-lock.json`, `test/continuation.test.js`, `test/fresh-audio.test.js`, `test/performance.test.js`, `test/renderer-controls.test.js`, `HANDOFF.md`
+
+### Architecture Decisions
+- The current typed message is the source of truth; persisted chat history remains available only where it can help a genuine follow-up.
+- Continuation remains bounded at two automatic retries to avoid infinite loops and surprise free-tier consumption.
+
+### Dependencies Added
+- None.
+
+### Verification
+- `npm test` passed: 56 tests.
+- `node --check main.js`, `node --check preload.js`, `node --check renderer/renderer.js`, `node --check src/prompts.js`, `node --check src/continuation.js`, `node --check src/fresh-audio.js`, and `node --check src/screen.js` passed.
+- `npm audit --omit=dev --audit-level=high` found 0 production vulnerabilities.
+- `npm run pack` produced `dist/mac-arm64/Laka AI.app` with version `2.1.8` and ASAR enabled.
+- `unzip -t 'dist/Laka AI v2.1.8.zip'` passed; SHA-256: `7d4911c549d31194fd7c7daee6af30da6801bb7d8b7ee79dba895f378df31064`.
+
+### Issues Found
+- External STT/model network and queue latency cannot be guaranteed or validated without a permitted live provider/device test.
+
+### Pending Work
+- Run a permitted microphone/meeting-audio smoke test using the user's configured provider; an automated build cannot validate an external provider response or physical audio route.

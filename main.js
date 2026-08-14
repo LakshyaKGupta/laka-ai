@@ -10,6 +10,7 @@ const { createLLM, formatProviderError, getFeatureMaxTokens, isTruncatedFinishRe
 const { MODES, hasRemoteTranscript } = require('./src/prompts');
 const { rms16 } = require('./src/wav');
 const { takeAudioChunk } = require('./src/audio-buffer');
+const { LIVE_AUDIO, retainNewestAudio } = require('./src/live-audio');
 const { clearConversation } = require('./src/conversation');
 const { waitForCompletion } = require('./src/fresh-audio');
 const { getCooldownMs, getEarliestRetryMs } = require('./src/provider-cooldown');
@@ -40,12 +41,12 @@ function recordProviderCooldown(provider, error) {
   const cooldownMs = getCooldownMs(error);
   if (cooldownMs) providerCooldowns[provider] = Date.now() + cooldownMs;
 }
-const FLUSH_MS = 2200;
-const MIN_BYTES = Math.floor(16000 * 2 * 0.6); // ~0.6s
+const FLUSH_MS = LIVE_AUDIO.flushMs;
+const MIN_BYTES = LIVE_AUDIO.minTranscriptionBytes;
 const RMS_GATE = 240;
 const MAX_TRANSCRIPT_TURNS = 80;
-const MAX_BUFFER_BYTES = 2 * 1024 * 1024;
-const MAX_TRANSCRIPTION_BYTES = 16000 * 2 * 4; // Four seconds keeps live transcription from building a backlog.
+const MAX_BUFFER_BYTES = LIVE_AUDIO.maxBufferedBytes;
+const MAX_TRANSCRIPTION_BYTES = LIVE_AUDIO.maxTranscriptionBytes;
 let flushTimer = null;
 
 function send(channel, data) { if (win && !win.isDestroyed()) win.webContents.send(channel, data); }
@@ -390,9 +391,10 @@ function isTrustedRenderer(event) {
 
 function queuePcm(channel, arrayBuffer) {
   const pcm = toPcmBuffer(arrayBuffer);
-  if (!pcm || bufferBytes[channel] + pcm.length > MAX_BUFFER_BYTES) return;
-  buffers[channel].push(pcm);
-  bufferBytes[channel] += pcm.length;
+  if (!pcm) return;
+  const queued = retainNewestAudio([...buffers[channel], pcm], MAX_BUFFER_BYTES);
+  buffers[channel] = queued.chunks;
+  bufferBytes[channel] = queued.bytes;
 }
 
 ipcMain.handle('settings:get', (event) => isTrustedRenderer(event) ? store.getPublicSettings() : null);

@@ -405,3 +405,38 @@
 
 ### Pending Work
 - Use the v2.1.6 package, configure Groq and/or OpenRouter, and make one permitted real request to validate the external account quotas.
+
+## Session Update - 2026-08-14 (v2.1.7 live voice latency)
+
+### Objective
+- Make listening react quickly, prevent stale queued audio from delaying replies, and add a microphone control beside the Play button.
+
+### Completed
+- Replaced the 2.2-second audio polling cadence with an 800 ms live cadence.
+- Reduced each transcription request to a bounded 2.5-second audio segment and retained only the newest eight seconds of queued PCM while a provider is busy. Stale speech is now dropped instead of making current speech wait behind it.
+- Added a microphone button immediately beside Play. It starts/stops the same consent-gated listening flow as the toolbar control and exposes its active state to assistive technology.
+
+### Files Modified
+- `main.js`, `src/live-audio.js`
+- `renderer/icons.js`, `renderer/index.html`, `renderer/renderer.js`, `renderer/styles.css`
+- `package.json`, `package-lock.json`, `test/live-audio.test.js`, `test/renderer-controls.test.js`, `HANDOFF.md`
+
+### Architecture Decisions
+- Live transcription prioritizes freshness over unbounded backlog retention. Provider/network latency is still external and cannot be made zero by the desktop app.
+- Voice-answer generation remains user-triggered; listening does not automatically send a response.
+
+### Dependencies Added
+- None.
+
+### Verification
+- `npm test` passed: 52 tests.
+- `node --check main.js`, `node --check renderer/renderer.js`, and `node --check src/live-audio.js` passed.
+- `npm audit --omit=dev --audit-level=high` found 0 production vulnerabilities.
+- `npm run pack` produced `dist/mac-arm64/Laka AI.app` with version `2.1.7` and ASAR enabled.
+- `unzip -t 'dist/Laka AI v2.1.7.zip'` passed; SHA-256: `f7f521983a49f32dbd8d181a415555fa00dd37de50d289446725b994bf543a44`.
+
+### Issues Found
+- Actual transcription accuracy depends on the microphone/virtual meeting-audio route, the selected language, and the external STT model. Unit tests cannot validate a real audio device or cloud response latency.
+
+### Pending Work
+- Conduct a permitted live microphone/meeting-audio test with a configured STT key; no automated test can access a real device or consume the user's provider quota.

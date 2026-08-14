@@ -17,6 +17,7 @@
   $('#end-conversation').innerHTML = icon('stop-square', { size: 14 });
   $('#smart-toggle .ic').innerHTML = icon('zap', { size: 14 });
   $('#more-btn').innerHTML = icon('more-horizontal', { size: 18 });
+  $('#mic-toggle').innerHTML = icon('mic', { size: 16 });
   $('#send-btn').innerHTML = icon('play', { size: 15 });
 
   // ---- state -------------------------------------------------------------
@@ -175,7 +176,7 @@
 
   // Stop = start/stop listening. Kick off the capture flow directly from the click so
   // the user gesture is fresh and mic access starts immediately.
-  $('#stop-btn').addEventListener('click', () => {
+  function toggleListening() {
     const active = $('#stop-btn').classList.contains('active');
     if (!active) {
       showStatus('Listening started. Only use this where consent is allowed.');
@@ -187,7 +188,9 @@
       showStatus('Listening stopped.');
       cue.captureToggle();
     }
-  });
+  }
+  $('#stop-btn').addEventListener('click', toggleListening);
+  $('#mic-toggle').addEventListener('click', toggleListening);
 
   // ---- capture: mic (renderer side) --------------------------------------
   let audioCtx = null, micStream = null, micNode = null, micProc = null;
@@ -284,6 +287,8 @@
   cue.on('capture:state', ({ active }) => {
     $('#live-dot').classList.toggle('off', !active);
     $('#stop-btn').classList.toggle('active', active);
+    $('#mic-toggle').classList.toggle('active', active);
+    $('#mic-toggle').setAttribute('aria-label', active ? 'Stop listening' : 'Start listening');
     if (active) {
       recordDiagnostic('Listening started');
       startMic().catch(() => {});

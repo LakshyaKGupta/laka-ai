@@ -125,13 +125,14 @@ async function streamGemini({ apiKey, model, system, turns, imageDataUrl, maxTok
 
 function getDefaultMaxTokens(settings) {
   if (typeof settings?.maxTokens === 'number' && settings.maxTokens > 0) return settings.maxTokens;
-  return settings?.smart ? 900 : 450;
+  return settings?.smart ? 1200 : 800;
 }
 
 function getFeatureMaxTokens(settings, { mode, small }) {
-  if (small || mode === 'say') return settings.smart ? 360 : 260;
-  if (mode === 'assist') return settings.smart ? 800 : 450;
-  return settings.smart ? 1000 : 600;
+  if (small) return settings.smart ? 360 : 260;
+  if (mode === 'say') return settings.smart ? 480 : 360;
+  if (mode === 'assist') return settings.smart ? 1100 : 750;
+  return settings.smart ? 1200 : 800;
 }
 
 function isRetryableProviderError(error) {
@@ -162,21 +163,24 @@ function getProviderCandidates(settings) {
   return candidates;
 }
 
-function createLLM(settings) {
-  const provider = settings.provider;
-  const keys = settings.apiKeys || {};
-  const tier = settings.smart ? 'smart' : 'fast';
-  const maxTokens = getDefaultMaxTokens(settings);
+function isFreeTierCandidate(candidate) {
   const freeTierModels = {
     gemini: new Set(['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview']),
     groq: new Set(['llama-3.1-8b-instant', 'llama-3.3-70b-versatile']),
     openrouter: new Set(['openrouter/free'])
   };
-  const candidates = getProviderCandidates(settings);
+  return Boolean(candidate && freeTierModels[candidate.provider] && freeTierModels[candidate.provider].has(candidate.model));
+}
+
+function createLLM(settings) {
+  const provider = settings.provider;
+  const maxTokens = getDefaultMaxTokens(settings);
+  const configuredCandidates = getProviderCandidates(settings);
+  const candidates = settings.freeTierOnly ? configuredCandidates.filter(isFreeTierCandidate) : configuredCandidates;
   const primary = candidates.find((entry) => entry.provider === provider) || candidates[0] || null;
   const model = primary ? primary.model : null;
   const apiKey = primary ? primary.apiKey : null;
-  const freeTierBlocked = settings.freeTierOnly && !(freeTierModels[provider] && freeTierModels[provider].has(model));
+  const freeTierBlocked = settings.freeTierOnly && configuredCandidates.length > 0 && !candidates.length;
 
   if (DEBUG) console.log('[DEBUG LLM] createLLM initialized:', { provider, model, candidateCount: candidates.length, ready: Boolean(primary) && !freeTierBlocked });
 
@@ -184,7 +188,7 @@ function createLLM(settings) {
     provider, model, apiKey,
     supportsImages: candidates.some((candidate) => candidate.supportsImages),
     ready: Boolean(primary) && !freeTierBlocked,
-    error: freeTierBlocked ? 'Free-tier only is enabled. Select Gemini, Groq, or OpenRouter with a supported free-tier model.' : (!primary ? 'Add a provider API key in Settings before asking Laka AI for help.' : ''),
+    error: freeTierBlocked ? 'Free-tier only is enabled, but none of the configured models is free-tier eligible. Use Gemini, Groq, or OpenRouter with a supported free-tier model.' : (!primary ? 'Add a provider API key in Settings before asking Laka AI for help.' : ''),
     getCandidates(params = {}) {
       return candidates.filter((candidate) => {
         if (params.requiresImages && !candidate.supportsImages) return false;
@@ -229,4 +233,4 @@ function formatProviderError(error) {
   return message.slice(0, 600);
 }
 
-module.exports = { buildOpenAIChatMessages, createLLM, formatProviderError, getDefaultMaxTokens, getFeatureMaxTokens, getProviderCandidates, isRetryableProviderError, isTruncatedFinishReason, isVisionProvider };
+module.exports = { buildOpenAIChatMessages, createLLM, formatProviderError, getDefaultMaxTokens, getFeatureMaxTokens, getProviderCandidates, isFreeTierCandidate, isRetryableProviderError, isTruncatedFinishReason, isVisionProvider };

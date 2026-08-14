@@ -4,6 +4,7 @@ const path = require('path');
 const { getWindowDiagnostic } = require('./src/window-diagnostics');
 const store = require('./src/store');
 const { captureScreenshot } = require('./src/screen');
+const { getScreenCaptureError } = require('./src/screen-request');
 const { createSTT } = require('./src/stt');
 const { createLLM, formatProviderError, getFeatureMaxTokens, isTruncatedFinishReason } = require('./src/llm');
 const { MODES, hasRemoteTranscript } = require('./src/prompts');
@@ -269,7 +270,14 @@ async function runFeature(mode, userText) {
       }
     }
 
-    const requiresImages = Boolean(imageDataUrl);
+    const screenCaptureError = getScreenCaptureError(def.needsScreen, imageDataUrl);
+    if (screenCaptureError) {
+      send('llm:error', { message: screenCaptureError });
+      send('status', { message: screenCaptureError });
+      return;
+    }
+
+    const requiresImages = Boolean(def.needsScreen);
     const availableCandidates = llm.getCandidates({ requiresImages, blockedProviders: providerCooldowns });
     if (!availableCandidates.length) {
       const retryMs = getEarliestRetryMs(providerCooldowns);

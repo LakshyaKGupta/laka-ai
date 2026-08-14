@@ -29,8 +29,8 @@ test('builds a provider chain that prefers the selected provider and adds config
 });
 
 test('uses a larger token budget so answers are not cut off early', () => {
-  assert.equal(getDefaultMaxTokens({ smart: false }), 450);
-  assert.equal(getDefaultMaxTokens({ smart: true }), 900);
+  assert.equal(getDefaultMaxTokens({ smart: false }), 800);
+  assert.equal(getDefaultMaxTokens({ smart: true }), 1200);
   assert.equal(getDefaultMaxTokens({ smart: false, maxTokens: 500 }), 500);
 });
 
@@ -77,5 +77,34 @@ test('skips a provider that is cooling down after a quota failure', () => {
     apiKeys: { gemini: 'g', groq: 'r' },
     models: { gemini: { fast: 'gemini-2.0-flash-lite' }, groq: { fast: 'llama-3.1-8b-instant' } }
   });
+  assert.deepEqual(llm.getCandidates({ blockedProviders: { gemini: Date.now() + 10_000 } }).map((entry) => entry.provider), ['groq']);
+});
+
+test('uses a configured eligible free fallback when the selected provider has no usable key', () => {
+  const llm = createLLM({
+    provider: 'gemini', smart: false, freeTierOnly: true,
+    apiKeys: { groq: 'g' },
+    models: {
+      gemini: { fast: 'gemini-2.0-flash-lite' },
+      groq: { fast: 'llama-3.1-8b-instant' }
+    }
+  });
+
+  assert.equal(llm.ready, true);
+  assert.equal(llm.model, 'llama-3.1-8b-instant');
+  assert.deepEqual(llm.getCandidates().map((entry) => entry.provider), ['groq']);
+});
+
+test('never sends a paid-model fallback while free-tier-only is enabled', () => {
+  const llm = createLLM({
+    provider: 'gemini', smart: false, freeTierOnly: true,
+    apiKeys: { gemini: 'g', openai: 'o', groq: 'r' },
+    models: {
+      gemini: { fast: 'gemini-2.0-flash-lite' },
+      groq: { fast: 'llama-3.1-8b-instant' },
+      openai: { fast: 'gpt-4o-mini' }
+    }
+  });
+
   assert.deepEqual(llm.getCandidates({ blockedProviders: { gemini: Date.now() + 10_000 } }).map((entry) => entry.provider), ['groq']);
 });

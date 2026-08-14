@@ -83,7 +83,7 @@ Laka AI uses **your own** API key. Click the **`...`** button in the input box (
 
 Your API keys are encrypted with macOS Keychain and the settings file retains only encrypted ciphertext. They are sent only to the provider you choose. Laka AI has no server and collects nothing.
 
-When a provider returns a temporary quota/rate-limit error, Laka AI tries configured providers in this order: selected provider, Gemini, Groq, OpenRouter, then any configured paid provider. OpenRouter does not provide speech-to-text, so Groq Whisper and the existing local Faster-Whisper fallback remain the voice options.
+When a provider returns a temporary quota/rate-limit error, Laka AI tries configured providers in this order: selected provider, Gemini, Groq, OpenRouter, then any configured paid provider. With **Free-tier only** on, each candidate is checked independently and only the supported Gemini, Groq, or OpenRouter free models are used. Add at least one backup key (Groq is recommended for fast chat and speech; OpenRouter is text-only) before Gemini reaches its quota. OpenRouter does not provide speech-to-text, so Groq Whisper and the existing local Faster-Whisper fallback remain the voice options.
 
 ### Speech-to-text and accuracy
 

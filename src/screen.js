@@ -3,7 +3,7 @@
 const { desktopCapturer, screen } = require('electron');
 const { getThumbnailSize } = require('./screen-size');
 
-const MAX_SCREENSHOT_EDGE = 1440;
+const MAX_SCREENSHOT_EDGE = 1600;
 
 async function captureScreenshot() {
   const primary = screen.getPrimaryDisplay();

@@ -407,8 +407,13 @@
   function statusText() {
     const k = settings.apiKeyConfigured;
     const has = [k.openai && 'OpenAI', k.anthropic && 'Anthropic', k.gemini && 'Gemini', k.groq && 'Groq', k.openrouter && 'OpenRouter', k.nvidia && 'Nvidia'].filter(Boolean);
+    const freeBackups = [
+      settings.provider !== 'gemini' && k.gemini && 'Gemini',
+      settings.provider !== 'groq' && k.groq && 'Groq',
+      settings.provider !== 'openrouter' && k.openrouter && 'OpenRouter'
+    ].filter(Boolean);
     const stt = k.groq ? 'Groq Whisper' : (k.openai ? 'Whisper' : (k.gemini ? 'Gemini' : 'Faster-Whisper'));
-    return 'Active: ' + settings.provider + ' · keys: ' + (has.join(', ') || 'none set') + ' · transcription: ' + stt;
+    return 'Active: ' + settings.provider + ' · keys: ' + (has.join(', ') || 'none set') + ' · free backups: ' + (freeBackups.join(' → ') || 'add Groq or OpenRouter') + ' · transcription: ' + stt;
   }
   function updateUsage() {
     const timing = usage.latency && usage.latency.firstTokenMs ? ` · first token ${(usage.latency.firstTokenMs / 1000).toFixed(1)}s` : '';

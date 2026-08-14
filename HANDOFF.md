@@ -368,3 +368,40 @@
 ### Verification
 - `npm test` passed: 45 tests.
 - `node --check main.js`, `node --check src/llm.js`, `node --check src/provider-cooldown.js`, and `node --check src/prompts.js` passed.
+
+## Session Update - 2026-08-14 (v2.1.6 fallback routing and answer completeness)
+
+### Objective
+- Continue answering when Gemini reaches its free-tier limit, while improving accuracy and complete one-pass replies in chat, Assist, and voice workflows.
+
+### Completed
+- Fixed Free-tier-only routing so every configured fallback is evaluated against its own provider/model. A configured eligible Groq or OpenRouter key is now available even when Gemini is selected, cooling down, missing, or not eligible.
+- Prevented paid-model fallbacks from being called while Free-tier-only is enabled.
+- Increased response budgets for full typed and screen answers (Fast: 800/750 tokens; Smart: 1,200/1,100). Voice replies remain concise but now have a 360/480-token budget.
+- Increased the Assist capture edge to 1,600px for clearer code/problem screenshots and block a screen request if Screen Recording capture fails, rather than generating from stale text without seeing the screen.
+- Clarified Settings and README so the configured free fallback chain is visible and users know a valid Groq/OpenRouter key is necessary once Gemini is rate-limited.
+
+### Files Modified
+- `main.js`, `src/llm.js`, `src/prompts.js`, `src/screen.js`, `src/screen-request.js`
+- `renderer/renderer.js`, `README.md`, `package.json`, `package-lock.json`
+- `test/providers.test.js`, `test/response-budget.test.js`, `test/screen-size.test.js`, `test/screen-request.test.js`, `HANDOFF.md`
+
+### Architecture Decisions
+- Candidate eligibility is centralized in `createLLM`; the renderer still receives only key-presence flags, never API keys.
+- Screen-dependent actions fail closed when no image was captured. Text/voice actions can still use Groq/OpenRouter during a Gemini cooldown.
+
+### Dependencies Added
+- None.
+
+### Verification
+- `npm test` passed: 49 tests.
+- `node --check main.js`, `node --check src/llm.js`, `node --check src/prompts.js`, `node --check src/screen.js`, and `node --check src/screen-request.js` passed.
+- `npm audit --omit=dev --audit-level=high` found 0 production vulnerabilities.
+- `npm run pack` produced `dist/mac-arm64/Laka AI.app` with version `2.1.6` and ASAR enabled.
+- `unzip -t 'dist/Laka AI v2.1.6.zip'` passed; SHA-256: `d0360b493c6d2e57212687938e2bc723e0b76853c433782ce43f8780dc5d512c`.
+
+### Issues Found
+- No local test can prove an external provider key has quota or access. A backup is only usable after its valid user-owned key has been added in Settings.
+
+### Pending Work
+- Use the v2.1.6 package, configure Groq and/or OpenRouter, and make one permitted real request to validate the external account quotas.

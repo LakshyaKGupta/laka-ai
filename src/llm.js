@@ -1,6 +1,7 @@
 const DEBUG = false; // Set to false to disable debug logging
 // LLM factory — OpenAI / Anthropic / Gemini behind one streaming interface.
 // stream({ system, turns:[{role,text}], imageDataUrl, maxTokens, onToken }) -> Promise<{text, finishReason}>
+const OMNIROUTE_BASE_URL = 'http://127.0.0.1:20128/v1';
 
 function stripDataUrl(dataUrl) {
   const m = /^data:(.+?);base64,(.*)$/s.exec(dataUrl || '');
@@ -28,7 +29,9 @@ function isTruncatedFinishReason(reason) {
 }
 
 function isVisionProvider(provider) {
-  return !['groq', 'openrouter'].includes(provider);
+  // OmniRoute can route to different downstream providers. Keep it text-only here
+  // so Screen Assist never sends screenshots to an unknown selected route.
+  return !['groq', 'omniroute', 'openrouter'].includes(provider);
 }
 
 async function streamOpenAI({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken, baseURL, supportsImages = true }) {
@@ -149,13 +152,15 @@ function getProviderCandidates(settings) {
   const candidates = [];
   const push = (provider) => {
     const model = (settings.models[provider] || {})[tier];
-    if (!model || !keys[provider]) return;
-    candidates.push({ provider, model, apiKey: keys[provider], supportsImages: isVisionProvider(provider) });
+    const apiKey = keys[provider] || (provider === 'omniroute' ? 'omniroute-local' : '');
+    if (!model || !apiKey) return;
+    candidates.push({ provider, model, apiKey, supportsImages: isVisionProvider(provider) });
   };
 
   push(selectedProvider);
   if (selectedProvider !== 'gemini') push('gemini');
   if (selectedProvider !== 'groq') push('groq');
+  if (selectedProvider !== 'omniroute') push('omniroute');
   if (selectedProvider !== 'openrouter') push('openrouter');
   if (selectedProvider !== 'openai') push('openai');
   if (selectedProvider !== 'anthropic') push('anthropic');
@@ -205,6 +210,7 @@ function createLLM(settings) {
           let result;
           if (candidate.provider === 'openai') result = await streamOpenAI(args);
           else if (candidate.provider === 'groq') result = await streamOpenAI({ ...args, baseURL: 'https://api.groq.com/openai/v1', supportsImages: false });
+          else if (candidate.provider === 'omniroute') result = await streamOpenAI({ ...args, baseURL: OMNIROUTE_BASE_URL, supportsImages: false });
           else if (candidate.provider === 'openrouter') result = await streamOpenAI({ ...args, baseURL: 'https://openrouter.ai/api/v1', supportsImages: false });
           else if (candidate.provider === 'nvidia') result = await streamOpenAI({ ...args, baseURL: 'https://integrate.api.nvidia.com/v1' });
           else if (candidate.provider === 'anthropic') result = await streamAnthropic(args);
@@ -227,10 +233,11 @@ function formatProviderError(error) {
   const retry = /retry in\s+([\d.]+)s/i.exec(message);
   if ((error && (error.status === 429 || error.code === 429)) || /quota|rate limit|resource_exhausted/i.test(message)) {
     const provider = error && error.lakaProvider ? error.lakaProvider : 'gemini';
-    const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
-    return `${providerName} free-tier limit reached${retry ? `. Retry in ${Math.ceil(Number(retry[1]))} seconds` : ''}. Laka AI will try configured fallbacks. Add Groq or OpenRouter in Settings for another free option, or wait for the quota window.`;
+    const providerName = provider === 'omniroute' ? 'OmniRoute' : provider.charAt(0).toUpperCase() + provider.slice(1);
+    const limitName = provider === 'gemini' ? 'Gemini free-tier limit reached' : `${providerName} rate limit reached`;
+    return `${limitName}${retry ? `. Retry in ${Math.ceil(Number(retry[1]))} seconds` : ''}. Laka AI will try configured fallbacks. Add Groq or OpenRouter in Settings for another free option, or configure local OmniRoute, then retry.`;
   }
   return message.slice(0, 600);
 }
 
-module.exports = { buildOpenAIChatMessages, createLLM, formatProviderError, getDefaultMaxTokens, getFeatureMaxTokens, getProviderCandidates, isFreeTierCandidate, isRetryableProviderError, isTruncatedFinishReason, isVisionProvider };
+module.exports = { OMNIROUTE_BASE_URL, buildOpenAIChatMessages, createLLM, formatProviderError, getDefaultMaxTokens, getFeatureMaxTokens, getProviderCandidates, isFreeTierCandidate, isRetryableProviderError, isTruncatedFinishReason, isVisionProvider };

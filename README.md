@@ -79,11 +79,23 @@ Laka AI uses **your own** API key. Click the **`...`** button in the input box (
 | **Anthropic (Claude)** | [console.anthropic.com](https://console.anthropic.com) | Great for screen & coding help. Claude has no speech-to-text, so add an OpenAI or Gemini key too if you want the listening features. |
 | **Google Gemini** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Recommended starting point: one key does chat + transcription, with a limited free tier. |
 | **Groq** | [console.groq.com/keys](https://console.groq.com/keys) | Recommended free alternative: fast Llama responses plus Whisper transcription. Free limits still apply. |
+| **OmniRoute (local)** | [OmniRoute setup](https://omniroute.online/) | A local OpenAI-compatible routing gateway. Install and run it on this Mac; paste a dashboard-issued endpoint key only when endpoint authentication is enabled. It is text-only in Laka AI so Screen Assist never sends screenshots to a route with unknown capabilities. |
 | **OpenRouter** | [openrouter.ai/keys](https://openrouter.ai/keys) | Text-only quota fallback. Set the default `openrouter/free` model to let OpenRouter choose an available free model; availability and limits can change. |
 
 Your API keys are encrypted with macOS Keychain and the settings file retains only encrypted ciphertext. They are sent only to the provider you choose. Laka AI has no server and collects nothing.
 
-When a provider returns a temporary quota/rate-limit error, Laka AI tries configured providers in this order: selected provider, Gemini, Groq, OpenRouter, then any configured paid provider. With **Free-tier only** on, each candidate is checked independently and only the supported Gemini, Groq, or OpenRouter free models are used. Add at least one backup key (Groq is recommended for fast chat and speech; OpenRouter is text-only) before Gemini reaches its quota. OpenRouter does not provide speech-to-text, so Groq Whisper and the existing local Faster-Whisper fallback remain the voice options.
+When a provider returns a temporary quota/rate-limit error, Laka AI tries configured providers in this order: selected provider, Gemini, Groq, local OmniRoute, OpenRouter, then any configured paid provider. With **Free-tier only** on, each candidate is checked independently and only the supported Gemini, Groq, or OpenRouter free models are used. OmniRoute is excluded from this mode because its own dashboard chooses downstream providers and Laka AI cannot verify their pricing. Add at least one backup key (Groq is recommended for fast chat and speech; OpenRouter and OmniRoute are text-only) before Gemini reaches its quota. OpenRouter and OmniRoute do not provide Laka AI speech-to-text, so Groq Whisper and the existing local Faster-Whisper fallback remain the voice options.
+
+### Optional: local OmniRoute fallback
+
+OmniRoute runs on your Mac; Laka AI never installs, starts, or exposes it remotely. Follow its setup once:
+
+```bash
+npm install -g omniroute
+omniroute
+```
+
+Open `http://localhost:20128`, connect only providers you trust, and paste an endpoint key in **Laka AI → Settings → OmniRoute** only if you enable endpoint authentication in OmniRoute. Laka AI uses the fixed local endpoint `http://127.0.0.1:20128/v1` with `auto/fast` when Smart is off and `auto/smart` when Smart is on. Configure OmniRoute's own routes to use only free providers if that is required; do not turn off Laka's Free-tier-only setting expecting Laka AI to verify OmniRoute's downstream pricing.
 
 ### Speech-to-text and accuracy
 

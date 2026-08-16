@@ -10,6 +10,7 @@ const DEFAULTS = {
     anthropic: { fast: 'claude-3-5-haiku-latest', smart: 'claude-3-5-sonnet-latest' },
     gemini: { fast: 'gemini-2.0-flash-lite', smart: 'gemini-2.0-flash' },
     groq: { fast: 'llama-3.1-8b-instant', smart: 'llama-3.3-70b-versatile' },
+    omniroute: { fast: 'auto/fast', smart: 'auto/smart' },
     openrouter: { fast: 'openrouter/free', smart: 'openrouter/free' },
     nvidia: { fast: 'meta/llama-3.2-11b-vision-instruct', smart: 'meta/llama-3.2-90b-vision-instruct' }
   }

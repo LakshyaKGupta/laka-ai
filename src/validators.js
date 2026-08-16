@@ -1,4 +1,4 @@
-const PROVIDERS = new Set(['openai', 'anthropic', 'gemini', 'groq', 'openrouter', 'nvidia']);
+const PROVIDERS = new Set(['openai', 'anthropic', 'gemini', 'groq', 'omniroute', 'openrouter', 'nvidia']);
 const MODES = new Set(['assist', 'say', 'followup', 'recap', 'ask', 'leetcode']);
 const MAX_TEXT_LENGTH = 12_000;
 const MAX_PCM_BYTES = 1_048_576;
@@ -19,12 +19,13 @@ function getSetupStatus(settings = {}) {
   const providerModels = models[provider] || {};
   const hasKey = Boolean(apiKeys[provider]);
   const hasModel = Boolean(providerModels.fast || providerModels.smart);
+  const keyOptional = provider === 'omniroute';
   return {
     provider,
     hasKey,
     hasModel,
-    ready: hasKey && hasModel,
-    message: !hasKey ? `Add a ${provider} API key in Settings to start.` : !hasModel ? `Choose a model for ${provider} in Settings.` : ''
+    ready: (hasKey || keyOptional) && hasModel,
+    message: !hasKey && !keyOptional ? `Add a ${provider} API key in Settings to start.` : !hasModel ? `Choose a model for ${provider} in Settings.` : ''
   };
 }
 

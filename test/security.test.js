@@ -17,11 +17,25 @@ test('only allows supported settings fields and non-empty replacement keys', () 
   });
 });
 
+test('allows OmniRoute settings while preserving the provider allowlist', () => {
+  assert.deepEqual(sanitizeSettingsPatch({ provider: 'omniroute', apiKeys: { omniroute: 'local-route-key', arbitrary: 'discard' }, models: { omniroute: { fast: 'auto/fast', smart: 'auto/smart' } } }), {
+    provider: 'omniroute',
+    apiKeys: { omniroute: 'local-route-key' },
+    models: { omniroute: { fast: 'auto/fast', smart: 'auto/smart' } }
+  });
+});
+
 test('reports missing setup clearly when the provider key or model is missing', () => {
   assert.deepEqual(getSetupStatus({ provider: 'gemini', apiKeys: {}, models: { gemini: { fast: 'gemini-3.1-flash-lite' } } }), {
     provider: 'gemini', hasKey: false, hasModel: true, ready: false, message: 'Add a gemini API key in Settings to start.'
   });
   assert.deepEqual(getSetupStatus({ provider: 'gemini', apiKeys: { gemini: 'key' }, models: { gemini: {} } }), {
     provider: 'gemini', hasKey: true, hasModel: false, ready: false, message: 'Choose a model for gemini in Settings.'
+  });
+});
+
+test('permits an unauthenticated local OmniRoute setup when a model is configured', () => {
+  assert.deepEqual(getSetupStatus({ provider: 'omniroute', apiKeys: {}, models: { omniroute: { fast: 'auto/fast' } } }), {
+    provider: 'omniroute', hasKey: false, hasModel: true, ready: true, message: ''
   });
 });

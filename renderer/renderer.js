@@ -24,7 +24,7 @@
   let settings = null;
   let busy = false;
   let aiEl = null;       // current streaming <div class="ai-text">
-  let apiKeyInputs = { openai: '', anthropic: '', gemini: '', groq: '', openrouter: '', nvidia: '' };
+  let apiKeyInputs = { openai: '', anthropic: '', gemini: '', groq: '', omniroute: '', openrouter: '', nvidia: '' };
   let caretEl = null;
   let usage = { requests: 0, freeTierOnly: true };
   const diagnostics = [];
@@ -375,7 +375,7 @@
       field.dataset.defaultPlaceholder = field.dataset.defaultPlaceholder || field.placeholder;
       field.placeholder = settings.apiKeyConfigured[provider] ? 'Configured — enter a new key to replace' : field.dataset.defaultPlaceholder;
     };
-    ['openai', 'anthropic', 'gemini', 'groq', 'openrouter', 'nvidia'].forEach(setKeyInput);
+    ['openai', 'anthropic', 'gemini', 'groq', 'omniroute', 'openrouter', 'nvidia'].forEach(setKeyInput);
     const m = settings.models[settings.provider] || { fast: '', smart: '' };
     $('#model-fast').value = m.fast; $('#model-smart').value = m.smart;
     $('#free-tier-only').checked = !!settings.freeTierOnly;
@@ -395,14 +395,15 @@
   }
   function statusText() {
     const k = settings.apiKeyConfigured;
-    const has = [k.openai && 'OpenAI', k.anthropic && 'Anthropic', k.gemini && 'Gemini', k.groq && 'Groq', k.openrouter && 'OpenRouter', k.nvidia && 'Nvidia'].filter(Boolean);
+    const has = [k.openai && 'OpenAI', k.anthropic && 'Anthropic', k.gemini && 'Gemini', k.groq && 'Groq', k.omniroute && 'OmniRoute', k.openrouter && 'OpenRouter', k.nvidia && 'Nvidia'].filter(Boolean);
     const freeBackups = [
       settings.provider !== 'gemini' && k.gemini && 'Gemini',
       settings.provider !== 'groq' && k.groq && 'Groq',
       settings.provider !== 'openrouter' && k.openrouter && 'OpenRouter'
     ].filter(Boolean);
     const stt = k.groq ? 'Groq Whisper' : (k.openai ? 'Whisper' : (k.gemini ? 'Gemini' : 'Faster-Whisper'));
-    return 'Active: ' + settings.provider + ' · keys: ' + (has.join(', ') || 'none set') + ' · free backups: ' + (freeBackups.join(' → ') || 'add Groq or OpenRouter') + ' · transcription: ' + stt;
+    const localRoute = k.omniroute ? ' · local route: OmniRoute' : '';
+    return 'Active: ' + settings.provider + ' · keys: ' + (has.join(', ') || 'none set') + ' · free backups: ' + (freeBackups.join(' → ') || 'add Groq or OpenRouter') + localRoute + ' · transcription: ' + stt;
   }
   function updateUsage() {
     const timing = usage.latency && usage.latency.firstTokenMs ? ` · first token ${(usage.latency.firstTokenMs / 1000).toFixed(1)}s` : '';
@@ -421,7 +422,7 @@
   }));
   async function saveSettings() {
     const apiKeys = {};
-    ['openai', 'anthropic', 'gemini', 'groq', 'openrouter', 'nvidia'].forEach((provider) => {
+    ['openai', 'anthropic', 'gemini', 'groq', 'omniroute', 'openrouter', 'nvidia'].forEach((provider) => {
       const field = $('#key-' + provider);
       const value = field.value.trim();
       apiKeyInputs[provider] = value;

@@ -508,3 +508,46 @@
 
 ### Pending Work
 - Restore network access, package v2.1.9, and run a permitted live provider/device smoke test.
+
+## Session Update - 2026-08-16 (v2.2.0 local OmniRoute fallback)
+
+### Objective
+- Add OmniRoute as a no-server, local AI routing fallback while keeping API-key storage protected and Laka AI's spending controls truthful.
+
+### Completed
+- Added **OmniRoute** to Settings, settings validation, optional Keychain-backed endpoint-key persistence, model defaults, status visibility, provider routing, documentation, and regression tests.
+- Laka AI sends OmniRoute requests only to the fixed local OpenAI-compatible endpoint `http://127.0.0.1:20128/v1`; it never exposes an arbitrary gateway URL from the renderer.
+- Added `auto/fast` and `auto/smart` defaults and placed OmniRoute after Gemini and Groq, before OpenRouter, in the text fallback chain.
+- Kept OmniRoute text-only in Laka AI. Screen Assist fails over only to known vision-capable providers rather than sending a screenshot to a dynamic OmniRoute route.
+- Kept OmniRoute out of **Free-tier only** eligibility. OmniRoute's own dashboard selects downstream models, so Laka AI cannot honestly verify their price. Users who need that setup must configure only free downstream routes in OmniRoute itself.
+- Installed OmniRoute `3.8.49` locally and verified its local server starts at `http://localhost:20128` with the documented `/v1/models` endpoint.
+- Documented the one-time local setup: `npm install -g omniroute`, run `omniroute`, open `http://localhost:20128`, and save an endpoint key in Laka AI Settings only when OmniRoute endpoint authentication is enabled. Laka AI does not auto-start OmniRoute.
+- Bumped the app to `2.2.0` and produced the Apple Silicon ZIP and DMG.
+
+### Files Modified
+- `README.md`, `package.json`, `package-lock.json`, `HANDOFF.md`
+- `renderer/index.html`, `renderer/renderer.js`
+- `src/llm.js`, `src/store.js`, `src/validators.js`
+- `test/providers.test.js`, `test/renderer-controls.test.js`, `test/security.test.js`
+
+### Architecture Decisions
+- The local endpoint is hard-coded to loopback to avoid turning the desktop app into an arbitrary network relay.
+- OmniRoute can operate without an endpoint key when its local server permits it; if endpoint authentication is enabled, its key follows the existing Keychain/safeStorage path and is never returned to the renderer after saving.
+- It is a chat fallback only. Speech-to-text remains Groq/OpenAI/Gemini/Faster-Whisper, and visual Assist remains vision-provider only.
+
+### Verification
+- `npm test` passed: 62 tests.
+- `node --check main.js`, `node --check src/llm.js`, `node --check src/validators.js`, and `node --check renderer/renderer.js` passed.
+- `npm audit --omit=dev --audit-level=high` found 0 production vulnerabilities.
+- `npm run pack` and `npm run dist` completed with ASAR enabled.
+- `npm audit --omit=dev --audit-level=high` found 0 production vulnerabilities.
+- `curl -H 'Authorization: Bearer omniroute-local' http://127.0.0.1:20128/v1/models` returned HTTP 200, and listed both `auto/fast` and `auto/smart`.
+- `unzip -t 'dist/Laka AI-2.2.0-arm64-mac.zip'` passed. SHA-256: `f16363cb1cd848617133038376a699453a0ef4a4643fdaac85756f8e62f6c6ce`.
+
+### Issues Found
+- The ZIP/DMG is unsigned and not notarized because a local Developer ID certificate and Apple notarization credentials are not configured. It must not be represented as a signed release.
+- A live LLM completion was not sent because the configured OmniRoute route/provider and its resulting cost were not known. The provider contract, loopback target, local model discovery, settings persistence path, packaging, and fallback ordering are covered by tests.
+
+### Pending Work
+- In the OmniRoute dashboard, connect only intended downstream providers and configure free-only routes if required; then make one permitted chat request to validate the user's actual route and quota.
+- Configure the Apple signing/notarization secrets in `docs/RELEASE.md` before publishing a signed GitHub Release.

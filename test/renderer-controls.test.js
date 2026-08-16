@@ -17,3 +17,9 @@ test('does not render a manual Continue answer control', () => {
   assert.doesNotMatch(renderer, /Continue answer/);
   assert.doesNotMatch(renderer, /llm:incomplete/);
 });
+
+test('exposes OmniRoute as a Keychain-backed local provider setting', () => {
+  assert.match(html, /data-provider="omniroute"/);
+  assert.match(html, /id="key-omniroute"/);
+  assert.match(renderer, /omniroute/);
+});

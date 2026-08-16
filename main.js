@@ -14,6 +14,7 @@ const { LIVE_AUDIO, retainNewestAudio, shouldFlushLiveAudio } = require('./src/l
 const { clearConversation } = require('./src/conversation');
 const { VOICE_REPLY_FLUSH_WAIT_MS, waitForCompletion } = require('./src/fresh-audio');
 const { shouldAutomaticallyContinue } = require('./src/continuation');
+const { createOutputGuard } = require('./src/output-guard');
 const { getCooldownMs, getEarliestRetryMs } = require('./src/provider-cooldown');
 const { extractResumeText } = require('./src/resume');
 const { boundedText, getSetupStatus, sanitizeAskPayload, sanitizeSettingsPatch, toPcmBuffer } = require('./src/validators');
@@ -294,6 +295,10 @@ async function runFeature(mode, userText) {
     const built = def.build({ transcript, userText: userText || '', ...context });
     if (DEBUG) console.log('[DEBUG MAIN] Built prompt. Starting LLM stream...');
     let firstTokenAt = 0;
+    const initialOutput = createOutputGuard((t) => {
+      if (!firstTokenAt) firstTokenAt = Date.now();
+      send('llm:token', { text: t });
+    });
     const first = await llm.stream({
       system: def.system,
       turns: [{ role: 'user', text: built }],
@@ -302,34 +307,36 @@ async function runFeature(mode, userText) {
       blockedProviders: providerCooldowns,
       onProviderError: recordProviderCooldown,
       maxTokens: getFeatureMaxTokens(settings, { mode, small: !!def.small }),
-      onToken: (t) => {
-        if (!firstTokenAt) firstTokenAt = Date.now();
-        send('llm:token', { text: t });
-      }
+      onToken: (t) => initialOutput.push(t)
     });
-    let fullText = first.text;
+    initialOutput.finish();
+    let fullText = initialOutput.text;
     let completion = first.finishReason;
     let attempts = first.attempts;
     let continuationCount = 0;
     let continuationFailed = false;
-    while (shouldAutomaticallyContinue(completion, continuationCount)) {
+    let needsRepair = initialOutput.blocked;
+    while ((needsRepair || shouldAutomaticallyContinue(completion, continuationCount)) && continuationCount < 2) {
       send('status', { message: 'Completing the answer…' });
       try {
+        const continuationOutput = createOutputGuard((t) => {
+          if (!firstTokenAt) firstTokenAt = Date.now();
+          send('llm:token', { text: t });
+        });
         const continued = await llm.stream({
           system: def.system,
-          turns: [{ role: 'user', text: `${built}\n\nContinue the answer immediately after the text below. Do not repeat, restart, or add a preamble.\n\nAnswer so far:\n${fullText}` }],
+          turns: [{ role: 'user', text: `${built}\n\nContinue only the final answer after the exact last visible character below. Do not repeat, restart, describe your reasoning, mention continuation, or write self-talk.\n\nAnswer so far:\n${fullText}` }],
           maxTokens: getFeatureMaxTokens(settings, { mode, small: !!def.small }),
           requiresImages,
           blockedProviders: providerCooldowns,
           onProviderError: recordProviderCooldown,
-          onToken: (t) => {
-            if (!firstTokenAt) firstTokenAt = Date.now();
-            send('llm:token', { text: t });
-          }
+          onToken: (t) => continuationOutput.push(t)
         });
-        fullText += continued.text;
+        continuationOutput.finish();
+        fullText += continuationOutput.text;
         completion = continued.finishReason;
         attempts += continued.attempts;
+        needsRepair = continuationOutput.blocked;
         continuationCount += 1;
       } catch (error) {
         continuationFailed = true;
@@ -337,7 +344,7 @@ async function runFeature(mode, userText) {
         break;
       }
     }
-    if (!continuationFailed && shouldAutomaticallyContinue(completion, continuationCount)) {
+    if (!continuationFailed && (needsRepair || shouldAutomaticallyContinue(completion, continuationCount))) {
       send('status', { message: 'The provider reached its output limit. Ask a shorter, more focused follow-up if a final section is missing.' });
     }
     if (fullText && fullText.trim()) {

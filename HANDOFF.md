@@ -551,3 +551,31 @@
 ### Pending Work
 - In the OmniRoute dashboard, connect only intended downstream providers and configure free-only routes if required; then make one permitted chat request to validate the user's actual route and quota.
 - Configure the Apple signing/notarization secrets in `docs/RELEASE.md` before publishing a signed GitHub Release.
+
+## Session Update - 2026-08-16 (v2.2.1 Assist completion and context correction)
+
+### Objective
+- Stop Assist from showing provider self-talk after a truncated answer, reduce unnecessary continuation latency, and prevent stale Laka AI output from changing the meaning of a new screen request.
+
+### Completed
+- Added a streamed output guard that holds only the final 160 characters of an in-progress response, then suppresses leaked continuation/self-talk markers such as “Wait, the user wants…” and “Refining…”. Normal text still streams immediately; the held tail flushes on completion.
+- If the guard suppresses leaked text, Laka AI makes the existing bounded continuation request with stricter final-answer-only instructions. Suppressed text is never persisted in chat history.
+- Increased Assist budgets to 1,800 Fast / 2,400 Smart tokens so coding solutions more often complete in the initial provider request instead of needing a second network round-trip. Voice and typed-chat budgets are unchanged.
+- Removed prior Laka-generated responses from Assist's secondary conversation context. Assist now uses the current screenshot and only recent user/other-speaker turns, avoiding accidental continuation of an old answer.
+- Added explicit final-answer/no-internal-analysis instructions to the Assist prompt.
+- Bumped the app to `2.2.1`.
+
+### Files Modified
+- `main.js`, `src/output-guard.js`, `src/llm.js`, `src/prompts.js`
+- `test/output-guard.test.js`, `test/performance.test.js`, `test/response-budget.test.js`
+- `package.json`, `package-lock.json`, `HANDOFF.md`
+
+### Verification
+- `npm test` passed: 65 tests.
+- `node --check main.js`, `node --check src/prompts.js`, and `node --check src/output-guard.js` passed.
+- Source Electron app launched from `npm start`; the local window exposes Assist, voice, settings, and send controls.
+- `npm audit --omit=dev --audit-level=high` found 0 production vulnerabilities.
+- `npm run dist` completed with ASAR enabled. `unzip -t 'dist/Laka AI-2.2.1-arm64-mac.zip'` passed; SHA-256: `5d12ff0d4ebc40ac2c82c828c5b3f6ccff6ad89696725efd05d9cd40befc6a31`.
+
+### Pending Work
+- The ZIP/DMG remains unsigned/notarized until the Apple credentials in `docs/RELEASE.md` are configured. Commit/push this corrective release when ready.

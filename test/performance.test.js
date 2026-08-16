@@ -31,6 +31,17 @@ test('keeps Laka AI replies out of the captured-speaker context for voice answer
   assert.doesNotMatch(prompt, /I represent Lakshya/);
 });
 
+test('keeps prior Laka AI output out of screen Assist context', () => {
+  const prompt = MODES.assist.build({
+    transcript: [
+      { channel: 'assistant', text: 'Wait, the user wants me to continue an old solution.' },
+      { channel: 'them', text: 'Can you explain the current requirement?' }
+    ]
+  });
+  assert.doesNotMatch(prompt, /continue an old solution/);
+  assert.match(prompt, /Them: Can you explain the current requirement/);
+});
+
 test('recognizes whether remote-speaker audio is available for a voice reply', () => {
   assert.equal(require('../src/prompts').hasRemoteTranscript([{ channel: 'assistant', text: 'Previous reply' }]), false);
   assert.equal(require('../src/prompts').hasRemoteTranscript([{ channel: 'them', text: 'Question' }]), true);

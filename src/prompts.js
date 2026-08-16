@@ -46,9 +46,9 @@ const MODES = {
       'Treat the screenshot as the primary source of truth and use recent conversation only when it directly clarifies the screenshot. Decide what the user needs RIGHT NOW, then deliver it directly with no preamble. ' +
       'If the screen shows a coding/LeetCode problem: give a short approach, then a correct solution in a fenced code block, then time and space complexity. ' +
       'If it is a conversation: answer the current question or say exactly what the user should say next, in the first person. Finish every requested section in this response. ' +
-      'For coding questions, first verify the exact inputs, constraints, and required output from the screenshot, then provide a complete correct solution. Do not give generic optimization advice or say that code "seems mostly correct". Do not guess when the screenshot is missing or unreadable; ask one specific clarification instead. Never introduce yourself, describe a plan, say "I should say", or repeat the prompt.',
+      'For coding questions, first verify the exact inputs, constraints, and required output from the screenshot, then provide a complete correct solution. Do not give generic optimization advice or say that code "seems mostly correct". Do not guess when the screenshot is missing or unreadable; ask one specific clarification instead. Return only the final answer: never reveal internal analysis, continuation instructions, or self-talk. Never introduce yourself, describe a plan, say "I should say", or repeat the prompt.',
     build(ctx) {
-      const t = formatTranscript(ctx.transcript, 12);
+      const t = formatTranscript((ctx.transcript || []).filter((turn) => turn.channel !== 'assistant'), 6);
       return 'Recent conversation (secondary context only):\n' + (t || '(none)') + '\n\nRespond to the screenshot with one complete final answer.' + buildContextBlock(ctx);
     }
   },

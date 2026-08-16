@@ -475,3 +475,36 @@
 
 ### Pending Work
 - Run a permitted microphone/meeting-audio smoke test using the user's configured provider; an automated build cannot validate an external provider response or physical audio route.
+
+## Session Update - 2026-08-16 (v2.1.9 phrase-aware voice and full Assist answers)
+
+### Objective
+- Prevent voice slowdowns after a few questions and stop Assist/typed answers from ending halfway through their required output.
+
+### Completed
+- Replaced fixed 800 ms speech request dispatch with phrase-aware dispatch: the pipeline polls every 200 ms but only transcribes after 450 ms of silence, when a 2.5-second segment fills, or when the user explicitly requests a voice reply.
+- This substantially reduces short cloud STT requests that can exhaust a free tier and trigger a slow fallback, while keeping a short pause-to-transcription delay.
+- Raised one-pass output budgets: Assist is 1,100 Fast / 1,500 Smart tokens; typed chat is 900 Fast / 1,300 Smart tokens. Voice remains intentionally brief.
+
+### Files Modified
+- `main.js`, `src/live-audio.js`, `src/llm.js`
+- `package.json`, `package-lock.json`, `test/live-audio.test.js`, `test/response-budget.test.js`, `HANDOFF.md`
+
+### Architecture Decisions
+- Pause-aware phrase segmentation provides a better latency/accuracy/quota balance than sending arbitrary sub-second chunks during active speech.
+- Larger answer budgets avoid visible truncation without adding another UI continuation action.
+
+### Dependencies Added
+- None.
+
+### Verification
+- `npm test` passed: 57 tests.
+- `node --check main.js`, `node --check src/live-audio.js`, and `node --check src/llm.js` passed.
+- `npm audit --omit=dev --audit-level=high` could not reach `registry.npmjs.org` because DNS/network access was unavailable.
+- `npm run pack` could not download an Electron build artifact from `github.com` because DNS/network access was unavailable; no v2.1.9 archive was produced.
+
+### Issues Found
+- Provider first-token time is still external. The local diagnostics reports the provider and timing after each answer, but no automated test can consume the user's quota or reproduce physical audio conditions.
+
+### Pending Work
+- Restore network access, package v2.1.9, and run a permitted live provider/device smoke test.

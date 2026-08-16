@@ -10,7 +10,7 @@ const { createLLM, formatProviderError, getFeatureMaxTokens } = require('./src/l
 const { MODES, hasRemoteTranscript } = require('./src/prompts');
 const { rms16 } = require('./src/wav');
 const { takeAudioChunk } = require('./src/audio-buffer');
-const { LIVE_AUDIO, retainNewestAudio } = require('./src/live-audio');
+const { LIVE_AUDIO, retainNewestAudio, shouldFlushLiveAudio } = require('./src/live-audio');
 const { clearConversation } = require('./src/conversation');
 const { VOICE_REPLY_FLUSH_WAIT_MS, waitForCompletion } = require('./src/fresh-audio');
 const { shouldAutomaticallyContinue } = require('./src/continuation');
@@ -25,6 +25,7 @@ const state = { capturing: false, busy: false, requests: 0, transcribing: { you:
 let sttDisabled = false; // set when the key can't reach any speech model (stops retry spam)
 const buffers = { you: [], them: [] };
 const bufferBytes = { you: 0, them: 0 };
+const lastSpeechAt = { you: 0, them: 0 };
 const transcript = []; // { channel, text, ts }
 const context = { resumeText: '', resumeName: '', company: '', role: '', responsibilities: '' };
 const providerCooldowns = {};
@@ -119,10 +120,11 @@ function createWindow() {
 }
 
 // -------- STT flushing --------
-async function flushChannel(channel) {
+async function flushChannel(channel, { force = false } = {}) {
   if (state.transcribing[channel]) return;
   const chunks = buffers[channel];
   if (!chunks.length) return;
+  if (!shouldFlushLiveAudio({ bytes: bufferBytes[channel], lastSpeechAt: lastSpeechAt[channel], force })) return;
   const { pcm, remaining } = takeAudioChunk(chunks, MAX_TRANSCRIPTION_BYTES);
   buffers[channel] = remaining;
   bufferBytes[channel] = Math.max(0, bufferBytes[channel] - pcm.length);
@@ -189,7 +191,7 @@ async function flushPendingAudio() {
   const pending = ['you', 'them'].filter((channel) => bufferBytes[channel] >= MIN_BYTES && !state.transcribing[channel]);
   if (!pending.length) return true;
   send('status', { message: 'Transcribing the latest audio…' });
-  return waitForCompletion(Promise.all(pending.map((channel) => flushChannel(channel))), VOICE_REPLY_FLUSH_WAIT_MS);
+  return waitForCompletion(Promise.all(pending.map((channel) => flushChannel(channel, { force: true }))), VOICE_REPLY_FLUSH_WAIT_MS);
 }
 
 // -------- capture toggle --------
@@ -202,7 +204,7 @@ function setCapturing(active) {
     startFlushLoop();
   } else {
     stopFlushLoop();
-    buffers.you = []; buffers.them = []; bufferBytes.you = 0; bufferBytes.them = 0;
+    buffers.you = []; buffers.them = []; bufferBytes.you = 0; bufferBytes.them = 0; lastSpeechAt.you = 0; lastSpeechAt.them = 0;
   }
   send('capture:state', { active });
   return active;
@@ -366,6 +368,7 @@ function isTrustedRenderer(event) {
 function queuePcm(channel, arrayBuffer) {
   const pcm = toPcmBuffer(arrayBuffer);
   if (!pcm) return;
+  if (rms16(pcm) >= RMS_GATE) lastSpeechAt[channel] = Date.now();
   const queued = retainNewestAudio([...buffers[channel], pcm], MAX_BUFFER_BYTES);
   buffers[channel] = queued.chunks;
   bufferBytes[channel] = queued.bytes;
